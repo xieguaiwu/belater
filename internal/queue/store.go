@@ -113,6 +113,16 @@ func (s *Store) Load() ([]*Task, error) {
 	return tasks, nil
 }
 
+// Save persists the full task list. Callers must provide a complete,
+// freshly loaded list to avoid clobbering concurrent mutations.
+func (s *Store) Save(tasks []*Task) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lock(func() error {
+		return s.writeLocked(tasks)
+	})
+}
+
 // Add appends a task and persists.
 func (s *Store) Add(t *Task) error {
 	if t.ID == "" {

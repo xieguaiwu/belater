@@ -21,15 +21,15 @@ func TestKindAt(t *testing.T) {
 		time string
 		want Kind
 	}{
-		{"fri morning peak", "2026-08-24 10:00", KindPeak},     // Monday
-		{"fri before peak", "2026-08-24 08:59", KindOffPeak},   // Monday
-		{"noon off-peak", "2026-08-24 12:00", KindOffPeak},     // Monday
-		{"afternoon before", "2026-08-24 13:59", KindOffPeak},  // Monday
-		{"afternoon peak", "2026-08-24 14:00", KindPeak},       // Monday
-		{"evening off-peak", "2026-08-24 18:00", KindOffPeak},  // Monday
-		{"night off-peak", "2026-08-24 23:59", KindOffPeak},    // Monday
-		{"midnight off-peak", "2026-08-25 00:00", KindOffPeak}, // Tuesday
-		{"sat day off-peak", "2026-08-29 10:00", KindOffPeak},  // Saturday
+		{"fri morning peak", "2026-08-24 10:00", KindPeak},          // Monday
+		{"fri before peak", "2026-08-24 08:59", KindOffPeak},        // Monday
+		{"noon off-peak", "2026-08-24 12:00", KindOffPeak},          // Monday
+		{"afternoon before", "2026-08-24 13:59", KindOffPeak},       // Monday
+		{"afternoon peak", "2026-08-24 14:00", KindPeak},            // Monday
+		{"evening off-peak", "2026-08-24 18:00", KindOffPeak},       // Monday
+		{"night off-peak", "2026-08-24 23:59", KindOffPeak},         // Monday
+		{"midnight off-peak", "2026-08-25 00:00", KindOffPeak},      // Tuesday
+		{"sat day off-peak", "2026-08-29 10:00", KindOffPeak},       // Saturday
 		{"sun afternoon off-peak", "2026-08-30 15:00", KindOffPeak}, // Sunday
 		{"mon 09:00 peak closed", "2026-08-24 09:00", KindPeak},     // left-closed
 		{"fri 18:00 open", "2026-08-28 18:00", KindOffPeak},         // right-open (Friday)
@@ -51,9 +51,9 @@ func TestNextSwitch(t *testing.T) {
 		at   string
 		want string
 	}{
-		{"mid morning peak", "2026-08-24 10:00", "2026-08-24 12:00"}, // Monday
-		{"noon boundary", "2026-08-24 12:00", "2026-08-24 14:00"},    // Monday
-		{"afternoon peak", "2026-08-24 16:00", "2026-08-24 18:00"},   // Monday
+		{"mid morning peak", "2026-08-24 10:00", "2026-08-24 12:00"},       // Monday
+		{"noon boundary", "2026-08-24 12:00", "2026-08-24 14:00"},          // Monday
+		{"afternoon peak", "2026-08-24 16:00", "2026-08-24 18:00"},         // Monday
 		{"weekend jump to monday", "2026-08-28 18:00", "2026-08-31 09:00"}, // Friday -> Monday
 		{"saturday no boundaries", "2026-08-29 10:00", "2026-08-31 09:00"}, // Saturday -> Monday
 	}
@@ -75,11 +75,11 @@ func TestNextOffPeakStart(t *testing.T) {
 		at   string
 		want string
 	}{
-		{"morning peak to noon", "2026-08-24 10:30", "2026-08-24 12:00"}, // Monday
+		{"morning peak to noon", "2026-08-24 10:30", "2026-08-24 12:00"},    // Monday
 		{"afternoon peak to 18:00", "2026-08-24 16:00", "2026-08-24 18:00"}, // Monday
-		{"already off-peak", "2026-08-24 19:00", "2026-08-24 19:00"}, // Monday
-		{"before 09:00 same time", "2026-08-24 07:00", "2026-08-24 07:00"}, // Monday
-		{"weekend stays", "2026-08-29 11:00", "2026-08-29 11:00"}, // Saturday
+		{"already off-peak", "2026-08-24 19:00", "2026-08-24 19:00"},        // Monday
+		{"before 09:00 same time", "2026-08-24 07:00", "2026-08-24 07:00"},  // Monday
+		{"weekend stays", "2026-08-29 11:00", "2026-08-29 11:00"},           // Saturday
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
