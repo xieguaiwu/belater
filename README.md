@@ -1,5 +1,7 @@
 # belater — DeepSeek 峰谷计费延迟执行器
 
+> GitHub: https://github.com/xieguaiwu/belater · 中文文档 | [English](README_en.md)
+
 把大型任务（如 pi-agent 多 agent 工作）排队到 DeepSeek **空闲时段**自动执行，避开高峰计费。空闲时段价格 = 高峰的 50%。
 
 ## 计费规则（2026-08-17 生效，2026-08-23 更新周末）
@@ -14,7 +16,8 @@
 ## 安装
 
 ```bash
-cd ~/Desktop/go-projects/belater
+git clone https://github.com/xieguaiwu/belater.git
+cd belater
 go build -o belater .
 install -m 0755 belater ~/.local/bin/belater
 ```
