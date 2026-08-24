@@ -85,6 +85,7 @@ belater daemon --uninstall
 ## State & logs
 
 - `~/.config/belater/` (`BELATER_STATE_DIR` overrides): `queue.json` (atomic + flock), `logs/<id>.log`, `daemon.lock`
+- **PATH handling**: when the daemon environment (systemd/cron) lacks per-user bin dirs (`~/.npm-global/bin`, `~/.local/bin`, `~/go/bin`), task execution auto-appends them to PATH — tools like `pi` installed in user dirs work out of the box; an explicit `--env PATH=...` wins
 - Crash recovery: interrupted `running` tasks reset to `queued`; tasks whose last pid is still alive are marked `failed` (no double execution)
 - GC: terminal tasks older than 7 days are removed automatically
 

@@ -135,7 +135,9 @@ belater daemon   # Ctrl+C 优雅退出，运行中任务完成后再退出
 - 状态目录：`~/.config/belater/`（`BELATER_STATE_DIR` 可覆盖）
   - `queue.json` — 任务队列（原子写入 + flock 防并发损坏）
   - `logs/<id>.log` — 每个任务的输出日志（带时间戳前缀）
-- 崩溃恢复：daemon 重启时把遗留 `running` 任务复位为 `queued`
+  - `daemon.lock` — 单实例锁
+- **PATH 处理**：daemon 环境（systemd/cron）缺少交互 shell 的用户 bin 目录（`~/.npm-global/bin`、`~/.local/bin`、`~/go/bin`）时，任务执行会自动补全 PATH——`pi` 等安装在用户目录的工具无需额外配置；任务显式设置 `--env PATH=...` 时以任务为准
+- 崩溃恢复：daemon 重启时把遗留 `running` 任务复位为 `queued`；任务 last pid 仍存活时标记 `failed`（不重复执行）
 - 自动清理：完成 7 天以上的终态任务自动删除
 
 ## 设计

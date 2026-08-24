@@ -18,12 +18,15 @@ import (
 )
 
 // systemdUnit is the user service unit installed by daemon --install.
+// The explicit PATH covers per-user bin dirs that systemd user environments
+// omit (npm-global, ~/.local/bin); %h expands to the home directory.
 const systemdUnit = `[Unit]
 Description=belater off-peak task scheduler
 After=network-online.target
 
 [Service]
 Type=simple
+Environment=PATH=%%h/.local/bin:%%h/.npm-global/bin:%%h/go/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=%s daemon
 Restart=on-failure
 RestartSec=5

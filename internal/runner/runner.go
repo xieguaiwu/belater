@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -26,6 +28,50 @@ type Result struct {
 // Run executes task t via /bin/sh -c, streaming output to logPath.
 func Run(t *queue.Task, logPath string) Result {
 	return RunWithWriter(t, logPath, nil)
+}
+
+// userBinDirs are common per-user binary directories that interactive shells
+// add to PATH but systemd/cron environments often lack (e.g. npm-global,
+// ~/.local/bin). A daemon-spawned task would otherwise fail with
+// "command not found" for tools like pi.
+var userBinDirs = []string{
+	".local/bin",
+	".npm-global/bin",
+	"go/bin",
+}
+
+// buildEnv returns the task environment with user bin dirs appended to PATH
+// when missing. An explicit PATH in the task env wins (no injection).
+func buildEnv(t *queue.Task) []string {
+	env := os.Environ()
+	// Honor an explicit PATH override in the task env.
+	for _, kv := range t.Env {
+		if strings.HasPrefix(kv, "PATH=") {
+			return append(env, t.Env...)
+		}
+	}
+	path := os.Getenv("PATH")
+	home, err := os.UserHomeDir()
+	if err == nil {
+		for _, sub := range userBinDirs {
+			dir := filepath.Join(home, sub)
+			if info, err := os.Stat(dir); err == nil && info.IsDir() && !inPath(path, dir) {
+				path = dir + ":" + path
+			}
+		}
+	}
+	env = append(env, "PATH="+path)
+	return append(env, t.Env...)
+}
+
+// inPath reports whether dir appears as a PATH component.
+func inPath(path, dir string) bool {
+	for _, p := range strings.Split(path, ":") {
+		if p == dir {
+			return true
+		}
+	}
+	return false
 }
 
 // RunWithWriter is Run with an extra live-output writer (e.g. os.Stdout).
@@ -53,7 +99,7 @@ func RunWithWriter(t *queue.Task, logPath string, live io.Writer) (res Result) {
 	if t.Cwd != "" {
 		cmd.Dir = t.Cwd
 	}
-	cmd.Env = append(os.Environ(), t.Env...)
+	cmd.Env = buildEnv(t)
 	// Kill the whole process group on timeout.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 

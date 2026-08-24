@@ -111,3 +111,45 @@ func TestRunEscapedChildBoundedDrain(t *testing.T) {
 		t.Errorf("drain took too long: %v", elapsed)
 	}
 }
+
+func TestBuildEnvAddsUserBins(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home dir")
+	}
+	// Simulate a systemd-like minimal PATH.
+	t.Setenv("PATH", "/usr/local/bin:/usr/bin:/bin")
+	env := buildEnv(&queue.Task{})
+	got := ""
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			got = strings.TrimPrefix(kv, "PATH=")
+		}
+	}
+	for _, sub := range userBinDirs {
+		dir := filepath.Join(home, sub)
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			if !strings.Contains(got, dir) {
+				t.Errorf("PATH missing %s: %s", dir, got)
+			}
+		}
+	}
+	// System dirs must remain.
+	if !strings.Contains(got, "/usr/local/bin") {
+		t.Errorf("PATH lost system dirs: %s", got)
+	}
+}
+
+func TestBuildEnvHonorsExplicitPath(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin:/bin")
+	env := buildEnv(&queue.Task{Env: []string{"PATH=/custom/bin"}})
+	found := false
+	for _, kv := range env {
+		if kv == "PATH=/custom/bin" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("explicit PATH override lost: %v", env)
+	}
+}
