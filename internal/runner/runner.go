@@ -23,9 +23,14 @@ type Result struct {
 }
 
 // Run executes task t via /bin/sh -c, streaming output to logPath.
+func Run(t *queue.Task, logPath string) Result {
+	return RunWithWriter(t, logPath, nil)
+}
+
+// RunWithWriter is Run with an extra live-output writer (e.g. os.Stdout).
 // Every log line gets a [HH:MM:SS] prefix. On timeout the process group is
 // killed so child processes do not survive.
-func Run(t *queue.Task, logPath string) Result {
+func RunWithWriter(t *queue.Task, logPath string, live io.Writer) Result {
 	res := Result{ExitCode: -1, StartedAt: time.Now()}
 	defer func() { res.FinishedAt = time.Now() }()
 
@@ -68,11 +73,19 @@ func Run(t *queue.Task, logPath string) Result {
 		for {
 			line, err := br.ReadString('\n')
 			if len(line) > 0 {
-				fmt.Fprintf(w, "[%s] %s", time.Now().Format("15:04:05"), line)
+				prefixed := fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), line)
+				w.WriteString(prefixed)
+				if live != nil {
+					io.WriteString(live, prefixed)
+				}
 			}
 			if err != nil {
 				if line := stringsTrimSuffix(line); line != "" && err == io.EOF {
-					fmt.Fprintf(w, "[%s] %s", time.Now().Format("15:04:05"), line)
+					prefixed := fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), line)
+					w.WriteString(prefixed)
+					if live != nil {
+						io.WriteString(live, prefixed)
+					}
 				}
 				break
 			}
