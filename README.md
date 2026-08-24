@@ -41,10 +41,11 @@ belater list
 | `belater status` | 当前计费窗口 + 下次切换倒计时 + 队列概况 |
 | `belater add <命令...>` | 入队任务（默认下次空闲时段执行） |
 | `belater list` | 查看队列（`--all` 含已完成，`--json` 脚本输出） |
+| `belater results` | **已完成任务结果汇总**（状态/退出码/耗时/完成时间，`--days N`、`--json`） |
 | `belater run <id>` | 立即前台执行（绕过调度） |
 | `belater rm <id>` | 删除任务 |
 | `belater pause <id>` / `resume <id>` | 暂停 / 恢复 |
-| `belater log <id>` | 查看任务日志（`--tail N`） |
+| `belater log <id>` | 查看任务日志（头部含状态/退出码/耗时元信息；`--tail N`，可放 ID 后） |
 | `belater daemon` | 运行调度器（`--once` 配合 cron） |
 | `belater config` | 显示调度配置 |
 
@@ -63,6 +64,8 @@ belater list
 | `--cwd DIR` | 工作目录（默认当前目录；pi 任务建议保持项目根目录） |
 | `--env K=V` | 环境变量（可重复） |
 | `--parallel` | 不占用串行槽位（默认同时只跑 1 个串行任务） |
+| `--on-done "命令"` | 完成后执行命令（env: `BELATER_TASK_ID/NAME/STATUS/EXIT`） |
+| `--notify` | 完成后桌面通知（`notify-send`，等价于预设的 --on-done） |
 
 ## 示例
 
@@ -78,6 +81,21 @@ belater add --delay 2h ./long_task.sh
 
 # 周末全天都是空闲 — 周五晚上入队即可
 belater add --pi "跑完整测试矩阵并修复发现的问题"
+```
+
+## 查看结果
+
+```bash
+belater results        # 最近 7 天完成任务汇总（状态/退出码/耗时）
+belater log <id>       # 单任务日志（头部含元信息，--tail 只看尾部）
+belater list --all     # 含终态任务的完整队列
+```
+
+任务完成时自动通知：
+
+```bash
+belater add --notify --pi "跑完整测试矩阵"        # 桌面通知（notify-send）
+belater add --on-done "curl -X POST ..." --pi "部署" # 完成回调（env 注入任务信息）
 ```
 
 ## 调度器运行方式
