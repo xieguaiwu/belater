@@ -18,6 +18,7 @@ import (
 type Result struct {
 	ExitCode   int
 	Err        error
+	Pid        int
 	StartedAt  time.Time
 	FinishedAt time.Time
 }
@@ -34,7 +35,7 @@ func RunWithWriter(t *queue.Task, logPath string, live io.Writer) (res Result) {
 	res = Result{ExitCode: -1, StartedAt: time.Now()}
 	defer func() { res.FinishedAt = time.Now() }()
 
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		res.Err = fmt.Errorf("open log: %w", err)
 		return res
@@ -64,7 +65,8 @@ func RunWithWriter(t *queue.Task, logPath string, live io.Writer) (res Result) {
 	cmd.Stdout = pw
 	cmd.Stderr = pw
 
-	// Prefix writer: adds [HH:MM:SS] to each line.
+	// Prefix writer: adds [HH:MM:SS] to each line. A final line without
+	// trailing newline is written exactly once (the EOF branch never re-writes).
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -80,13 +82,6 @@ func RunWithWriter(t *queue.Task, logPath string, live io.Writer) (res Result) {
 				}
 			}
 			if err != nil {
-				if line := stringsTrimSuffix(line); line != "" && err == io.EOF {
-					prefixed := fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), line)
-					w.WriteString(prefixed)
-					if live != nil {
-						io.WriteString(live, prefixed)
-					}
-				}
 				break
 			}
 		}
@@ -99,8 +94,16 @@ func RunWithWriter(t *queue.Task, logPath string, live io.Writer) (res Result) {
 	if runErr != nil && ctx.Err() == context.DeadlineExceeded {
 		killProcessGroup(cmd)
 	}
+	res.Pid = cmd.Process.Pid
 	pw.Close()
-	<-done
+	// Bounded drain: an escaped child (setsid/daemonize) that holds the pipe
+	// write end must not block the task forever. Close the read end after 10s.
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		pr.Close()
+		<-done
+	}
 	pr.Close()
 
 	if runErr != nil {
@@ -116,14 +119,6 @@ func RunWithWriter(t *queue.Task, logPath string, live io.Writer) (res Result) {
 	}
 	res.ExitCode = 0
 	return res
-}
-
-// stringsTrimSuffix removes a trailing newline (local helper to keep io loop simple).
-func stringsTrimSuffix(s string) string {
-	for len(s) > 0 && (s[len(s)-1] == '\n' || s[len(s)-1] == '\r') {
-		s = s[:len(s)-1]
-	}
-	return s
 }
 
 // killProcessGroup sends SIGKILL to the process group of cmd.

@@ -88,3 +88,26 @@ func TestRunChildProcessKilled(t *testing.T) {
 		t.Error("grandchild survived: marker file created after timeout")
 	}
 }
+
+func TestRunNoDuplicateLastLine(t *testing.T) {
+	// A final line without trailing newline must appear exactly once.
+	_, log := runTask(t, &queue.Task{Command: "printf no-newline"})
+	n := strings.Count(log, "no-newline")
+	if n != 1 {
+		t.Errorf("last line duplicated: found %d occurrences in %q", n, log)
+	}
+}
+
+func TestRunEscapedChildBoundedDrain(t *testing.T) {
+	// A setsid child escapes the process group; the pipe drain must still
+	// terminate within a bounded time (10s cap) instead of hanging forever.
+	start := time.Now()
+	res, _ := runTask(t, &queue.Task{Command: "setsid sh -c 'sleep 5' & exit 0", TimeoutSec: 1})
+	elapsed := time.Since(start)
+	if res.ExitCode != 0 {
+		t.Errorf("main command exited 0, got %+v", res)
+	}
+	if elapsed > 15*time.Second {
+		t.Errorf("drain took too long: %v", elapsed)
+	}
+}

@@ -73,6 +73,19 @@ func cmdList(args []string) int {
 	return 0
 }
 
+// validID reports whether s looks like a task ID (8 hex chars).
+func validID(s string) bool {
+	if len(s) != 8 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
+	return true
+}
+
 // cmdRemove deletes a task.
 func cmdRemove(args []string) int {
 	fs := flag.NewFlagSet("rm", flag.ContinueOnError)
@@ -82,16 +95,20 @@ func cmdRemove(args []string) int {
 	if fs.NArg() != 1 {
 		return usageError(fs, "需要一个任务 ID")
 	}
+	id := fs.Arg(0)
+	if !validID(id) {
+		return usageError(fs, "无效的任务 ID %q", id)
+	}
 	st, err := openStore()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		return 1
 	}
-	if err := st.Remove(fs.Arg(0)); err != nil {
+	if err := st.Remove(id); err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		return 1
 	}
-	fmt.Printf("已删除 %s\n", fs.Arg(0))
+	fmt.Printf("已删除 %s\n", id)
 	return 0
 }
 
@@ -113,12 +130,16 @@ func setStatus(args []string, name string, status queue.Status) int {
 	if fs.NArg() != 1 {
 		return usageError(fs, "需要一个任务 ID")
 	}
+	id := fs.Arg(0)
+	if !validID(id) {
+		return usageError(fs, "无效的任务 ID %q", id)
+	}
 	st, err := openStore()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		return 1
 	}
-	t, err := st.Find(fs.Arg(0))
+	t, err := st.Find(id)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		return 1
@@ -149,12 +170,16 @@ func cmdRun(args []string) int {
 	if fs.NArg() != 1 {
 		return usageError(fs, "需要一个任务 ID")
 	}
+	id := fs.Arg(0)
+	if !validID(id) {
+		return usageError(fs, "无效的任务 ID %q", id)
+	}
 	st, err := openStore()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		return 1
 	}
-	t, err := st.Find(fs.Arg(0))
+	t, err := st.Find(id)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		return 1
@@ -203,12 +228,16 @@ func cmdLog(args []string) int {
 	if fs.NArg() != 1 {
 		return usageError(fs, "需要一个任务 ID")
 	}
+	id := fs.Arg(0)
+	if !validID(id) {
+		return usageError(fs, "无效的任务 ID %q", id)
+	}
 	st, err := openStore()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		return 1
 	}
-	path := st.LogPath(fs.Arg(0))
+	path := st.LogPath(id)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)

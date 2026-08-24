@@ -2,34 +2,39 @@
 
 ## 项目当前状态
 
-belater v0.1.0 — DeepSeek 峰谷计费延迟执行器（Go 1.25 纯标准库，无第三方依赖）。
-已部署 `~/.local/bin/belater`，systemd 用户服务 `belater.service` 已安装并运行中（active）。
+belater v0.1.1 — DeepSeek 峰谷计费延迟执行器（Go 1.25 纯标准库，无第三方依赖）。
+已部署 `~/.local/bin/belater`，systemd 用户服务 `belater.service` 运行中（active）。
 
 ## 最后一次完成的工作（2026-08-24）
 
-- 完整实现：schedule（峰谷窗口计算，含周末规则）/ queue（JSON 持久化 + flock 原子写）/ runner（sh -c 执行 + 时间戳日志 + 超时杀进程组）/ daemon（调度循环 + 崩溃恢复 + 指数退避重试 + Every 每日重复 + GC）/ cli（10 个子命令）
-- 端到端验证：`belater add --pi "..."` → systemd 服务自动执行 → 日志落盘 → done ✅
-- 实施计划：`docs/plans/2026-08-24-belater.md`（自足、无占位符）
-- git 历史：7 commits（初始到 v0.1.0 验证）
-- graphify-out/ 已构建（185 节点，God Nodes: Store/Task/Schedule）
+- **v0.1.0 初版**：schedule（峰谷窗口，周末规则）/ queue（JSON + flock 原子写）/ runner（sh -c + 日志 + 超时杀组）/ daemon（tick + 恢复 + 重试 + Every + GC）/ cli 10 子命令；端到端验证通过
+- **momus 批判性审查（2026-08-24）**：P0×1 + P1×3 + P2×9，结论"修复后发布"
+- **v0.1.1 修复轮（全部落地）**：
+  - P0-1 双派发竞态：`Store.ClaimDue`（CAS 条件更新）+ `daemon.lock` 单实例锁（LOCK_EX|LOCK_NB）——实测第二个实例报错退出
+  - P1-1 管道排空上界：`<-done` 改 10s 有界等待，逃逸进程不再永久阻塞
+  - P1-2 孤儿恢复：runner Result 带 Pid → Task.LastPid；recover 时 /proc 存活检查——存活标记 Failed，不重跑
+  - P1-3 重试落高峰：重试时刻经 `NextOffPeakStart` 钳制；`--every` 落高峰时 add 警告
+  - P2：日志末行去重、时区统一（--at/--every 按 Asia/Shanghai）、误导提示修复、文件 0600、ID 8-hex 校验、损坏 queue.json 隔离、fsync、死代码清理、NewID fallback 修正
+- 测试 41 个全绿（新增：ClaimDue 竞态、孤儿恢复、重试钳制、逃逸进程有界排空、末行去重、实例锁实测）
+- 端到端复验通过（systemd 服务执行 v0.1.1 任务）
 
 ## 遗留问题 / 待办
 
 - [ ] 计费规则硬编码在 `internal/schedule`（DefaultSchedule）——DeepSeek 再改规则时需改代码；可考虑 config.json 外部化（v0.2.0 候选）
-- [ ] `--every` 任务首次 RunAt 默认排到下次空闲时段而非下一个 every 时刻——语义上可用但注意：`--every 02:00` 在白天入队会先在下个空闲（18:00 后）跑一次，再按 02:00 循环。若要严格首次即 02:00 需加 `--first-at` 选项
+- [ ] `--every` 任务首次 RunAt 默认排到下次空闲时段而非下一个 every 时刻——白天入队 `--every 02:00` 会先在下个空闲（18:00 后）跑一次再循环；要严格首次即 02:00 需加 `--first-at` 选项
 - [ ] 并发测试 `TestConcurrentAdds` 依赖 flock，慢机可能 flaky（200 个 Add 串行 flock，~2s）
-- [ ] daemon 无单独 PID/状态文件——多实例同时 `belater daemon` 会重复派发（flock 防损坏但不防双派发）；真实场景由 systemd 保证单实例
+- [ ] daemon 单实例锁已实现（daemon.lock）——但 `belater run <id>` 前台执行不受锁约束，与 daemon 并行跑同一任务仍可能双执行（`run` 是显式用户操作，接受此风险）
 - [ ] runner 用 `/bin/sh -c`——含中文路径的命令在非 UTF-8 locale 环境可能异常（本机 OK）
+- [ ] `--once` 模式下 waitRunning 上限 10 分钟——超长任务用 systemd 常驻方式
 
 ## 远程资源
 
-无远程依赖。本地：`~/.config/belater/` 状态目录（queue.json + logs/）。
+无远程依赖。本地：`~/.config/belater/` 状态目录（queue.json + logs/ + daemon.lock）。
 
 ## 知识图谱
 
-- graphify-out/: 存在（2026-08-24 构建）
-- God Nodes: Store(26) / Task(18) / Schedule(15)
+- graphify-out/: 存在（2026-08-24 v0.1.1 后需重建）
 
 ## 最后更新时间
 
-2026-08-24 15:10
+2026-08-24 15:30

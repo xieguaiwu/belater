@@ -3,6 +3,7 @@ package queue
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"time"
 )
 
@@ -47,15 +48,16 @@ type Task struct {
 	Status     Status     `json:"status"`
 	CreatedAt  time.Time  `json:"created_at"`
 	LastRun    *time.Time `json:"last_run,omitempty"`
-	LastExit   int        `json:"last_exit"` // -1 = never run
+	LastExit   int        `json:"last_exit"`          // -1 = never run
+	LastPid    int        `json:"last_pid,omitempty"` // pid of the last execution (crash recovery)
 }
 
 // NewID returns an 8-hex-char random task ID.
 func NewID() string {
 	b := make([]byte, 4)
-	if _, err := rand.Read(b); err != nil {
-		// crypto/rand failure is fatal in practice; fall back to time-based.
-		return hex.EncodeToString([]byte(time.Now().Format("150405.000")))
+	if _, err := rand.Read(b); err == nil {
+		return hex.EncodeToString(b)
 	}
-	return hex.EncodeToString(b)
+	// crypto/rand failure is fatal in practice; fall back to time-based.
+	return fmt.Sprintf("%08x", time.Now().UnixNano()&0xFFFFFFFF)
 }

@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
+	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	"belater/internal/queue"
@@ -38,13 +41,26 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	logger := log.New(lw, "", log.LstdFlags)
 
+	// Single-instance lock: a second daemon (systemd + cron --once, or a
+	// manual foreground run) must not dispatch the same tasks twice.
+	unlock, err := acquireInstanceLock(cfg.Store.Dir, logger)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
 	if err := recoverInterrupted(cfg.Store, logger); err != nil {
 		return err
 	}
 
+	sch := cfg.Schedule
+	if sch == nil {
+		sch = schedule.DefaultSchedule()
+	}
+
 	var wg sync.WaitGroup
 	for {
-		dispatchOnce(cfg.Store, cfg.MaxParallel, &wg, logger)
+		dispatchOnce(cfg.Store, sch, cfg.MaxParallel, &wg, logger)
 
 		if cfg.Once {
 			break
@@ -64,24 +80,65 @@ func Run(ctx context.Context, cfg Config) error {
 	return nil
 }
 
+// acquireInstanceLock takes an exclusive non-blocking flock on daemon.lock.
+// The returned release func drops the lock. Fails when another instance runs.
+func acquireInstanceLock(dir string, logger *log.Logger) (func(), error) {
+	path := filepath.Join(dir, "daemon.lock")
+	lf, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open instance lock: %w", err)
+	}
+	if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		lf.Close()
+		return nil, fmt.Errorf("另一个 belater daemon 实例正在运行（%s 被占用）", path)
+	}
+	logger.Printf("instance lock acquired: %s", path)
+	return func() {
+		syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+		lf.Close()
+	}, nil
+}
+
 // recoverInterrupted resets tasks left in Running state by a crashed daemon.
+// Tasks whose last pid is still alive are marked Failed (the old process may
+// still be running) instead of re-run, to avoid double execution.
 func recoverInterrupted(s *queue.Store, logger *log.Logger) error {
 	tasks, err := s.Load()
 	if err != nil {
+		// A corrupt queue must not wedge the daemon into a restart loop:
+		// quarantine the file and continue with an empty queue.
+		bad := filepath.Join(s.Dir, "queue.json.bad-"+time.Now().Format("20060102-150405"))
+		if rerr := os.Rename(filepath.Join(s.Dir, "queue.json"), bad); rerr == nil {
+			logger.Printf("queue.json 损坏，已隔离到 %s（队列重置为空）", bad)
+			return nil
+		}
 		return fmt.Errorf("load queue: %w", err)
 	}
 	changed := false
 	for _, t := range tasks {
-		if t.Status == queue.Running {
+		if t.Status != queue.Running {
+			continue
+		}
+		if t.LastPid > 0 && pidAlive(t.LastPid) {
+			t.Status = queue.Failed
+			t.LastExit = -1
+			logger.Printf("task %s (%s) 孤儿进程 pid=%d 仍存活，标记 Failed 而非重跑", t.ID, t.Name, t.LastPid)
+		} else {
 			t.Status = queue.Queued
-			changed = true
 			logger.Printf("recovered interrupted task %s (%s)", t.ID, t.Name)
 		}
+		changed = true
 	}
 	if changed {
 		return s.Save(tasks)
 	}
 	return nil
+}
+
+// pidAlive reports whether a process with the given pid exists.
+func pidAlive(pid int) bool {
+	_, err := os.Stat(filepath.Join("/proc", fmt.Sprintf("%d", pid)))
+	return err == nil
 }
 
 // runningCount counts tasks in Running state.
@@ -110,8 +167,9 @@ func waitRunning(wg *sync.WaitGroup, timeout time.Duration) {
 }
 
 // dispatchOnce launches all due tasks that fit within MaxParallel.
-// Completion handlers run in goroutines and persist via the store.
-func dispatchOnce(s *queue.Store, maxParallel int, wg *sync.WaitGroup, logger *log.Logger) {
+// Claiming is a compare-and-swap (Store.ClaimDue), so a racing instance
+// cannot double-dispatch: the loser gets an error and skips the task.
+func dispatchOnce(s *queue.Store, sch *schedule.Schedule, maxParallel int, wg *sync.WaitGroup, logger *log.Logger) {
 	tasks, err := s.Load()
 	if err != nil {
 		logger.Printf("load queue: %v", err)
@@ -126,14 +184,13 @@ func dispatchOnce(s *queue.Store, maxParallel int, wg *sync.WaitGroup, logger *l
 
 	// 2. Count running non-parallel tasks to enforce the serial slot budget.
 	serialRunning := 0
-	var runningWg sync.WaitGroup
 	for _, t := range tasks {
 		if t.Status == queue.Running && !t.Parallel {
 			serialRunning++
 		}
 	}
 
-	// 3. Dispatch due tasks.
+	// 3. Dispatch due tasks via CAS claim.
 	for _, t := range tasks {
 		if t.Status != queue.Queued || t.RunAt.After(now) {
 			continue
@@ -142,34 +199,34 @@ func dispatchOnce(s *queue.Store, maxParallel int, wg *sync.WaitGroup, logger *l
 			continue // serial slot budget exhausted
 		}
 		serialRunning++
-		t.Status = queue.Running
-		if err := s.Update(t); err != nil {
-			logger.Printf("mark running %s: %v", t.ID, err)
+		claimed, err := s.ClaimDue(t.ID)
+		if err != nil {
+			// Another instance claimed it in the meantime; do not run twice.
+			logger.Printf("claim %s: %v (skip)", t.ID, err)
 			continue
 		}
 		wg.Add(1)
-		runningWg.Add(1)
 		go func(t *queue.Task) {
 			defer wg.Done()
-			defer runningWg.Done()
-			finishTask(s, t, logger)
-		}(t)
+			finishTask(s, sch, t, logger)
+		}(claimed)
 	}
 }
 
 // finishTask runs the task and persists the outcome with retry/Every logic.
-func finishTask(s *queue.Store, t *queue.Task, logger *log.Logger) {
+func finishTask(s *queue.Store, sch *schedule.Schedule, t *queue.Task, logger *log.Logger) {
 	res := runner.Run(t, s.LogPath(t.ID))
 	logger.Printf("task %s (%s) finished: exit=%d err=%v", t.ID, t.Name, res.ExitCode, res.Err)
 
 	t.Runs++
 	t.LastRun = &res.FinishedAt
 	t.LastExit = res.ExitCode
+	t.LastPid = res.Pid
 
 	switch {
 	case res.ExitCode == 0:
 		if t.Every != "" && (t.MaxRuns == 0 || t.Runs < t.MaxRuns) {
-			next := nextEvery(res.FinishedAt, t.Every)
+			next := nextEvery(res.FinishedAt, t.Every, sch)
 			if next.IsZero() {
 				logger.Printf("task %s: invalid every %q, marking done", t.ID, t.Every)
 				t.Status = queue.Done
@@ -183,10 +240,13 @@ func finishTask(s *queue.Store, t *queue.Task, logger *log.Logger) {
 		}
 	case t.Runs <= t.Retries:
 		// Retry with exponential backoff: 30s, 60s, 120s, ...
+		// Clamp the retry time into an off-peak window so a failure at the
+		// tail of an off-peak window never retries at full peak price.
 		delay := 30 * time.Second * time.Duration(1<<(t.Runs-1))
-		t.RunAt = time.Now().Add(delay)
+		retryAt := sch.NextOffPeakStart(time.Now().Add(delay))
+		t.RunAt = retryAt
 		t.Status = queue.Queued
-		logger.Printf("task %s will retry in %v (attempt %d/%d)", t.ID, delay, t.Runs, t.Retries)
+		logger.Printf("task %s will retry at %v (attempt %d/%d)", t.ID, retryAt, t.Runs, t.Retries)
 	default:
 		t.Status = queue.Failed
 	}
@@ -216,10 +276,10 @@ func gc(s *queue.Store, tasks []*queue.Task, logger *log.Logger) error {
 	return nil
 }
 
-// nextEvery computes the next occurrence of "HH:MM" strictly after t.
-// Returns zero time when the format is invalid.
-func nextEvery(t time.Time, every string) time.Time {
-	loc := t.Location()
+// nextEvery computes the next occurrence of "HH:MM" strictly after t,
+// interpreted in the billing timezone. Returns zero time when invalid.
+func nextEvery(t time.Time, every string, sch *schedule.Schedule) time.Time {
+	loc := sch.Location
 	var hh, mm int
 	if _, err := fmt.Sscanf(every, "%d:%d", &hh, &mm); err != nil {
 		return time.Time{}
@@ -227,7 +287,9 @@ func nextEvery(t time.Time, every string) time.Time {
 	if hh < 0 || hh > 23 || mm < 0 || mm > 59 {
 		return time.Time{}
 	}
-	candidate := time.Date(t.Year(), t.Month(), t.Day(), hh, mm, 0, 0, loc)
+	// Convert t into the billing timezone before picking the date.
+	lt := t.In(loc)
+	candidate := time.Date(lt.Year(), lt.Month(), lt.Day(), hh, mm, 0, 0, loc)
 	if !candidate.After(t) {
 		candidate = candidate.AddDate(0, 0, 1)
 	}

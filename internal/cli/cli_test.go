@@ -33,16 +33,16 @@ func TestParseHHMM(t *testing.T) {
 		{"00:00", "2026-08-25 00:00"},
 	}
 	for _, c := range cases {
-		got := parseHHMM(c.in, now)
+		got := parseHHMM(c.in, now, loc)
 		want, _ := time.ParseInLocation("2006-01-02 15:04", c.want, loc)
 		if !got.Equal(want) {
 			t.Errorf("parseHHMM(%s) = %v, want %v", c.in, got, want)
 		}
 	}
-	if !parseHHMM("25:00", now).IsZero() {
+	if !parseHHMM("25:00", now, loc).IsZero() {
 		t.Error("invalid hour must be zero")
 	}
-	if !parseHHMM("ab", now).IsZero() {
+	if !parseHHMM("ab", now, loc).IsZero() {
 		t.Error("invalid format must be zero")
 	}
 }

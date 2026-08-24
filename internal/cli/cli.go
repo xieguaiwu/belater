@@ -14,7 +14,7 @@ import (
 )
 
 // Version is the tool version.
-const Version = "0.1.0"
+const Version = "0.1.1"
 
 // Main dispatches subcommands and returns the process exit code.
 func Main(args []string) int {

@@ -35,7 +35,7 @@ func (s *Store) path() string { return filepath.Join(s.Dir, queueFile) }
 
 // lock acquires an exclusive flock and runs f. The caller must already hold s.mu.
 func (s *Store) lock(f func() error) error {
-	lf, err := os.OpenFile(filepath.Join(s.Dir, lockFile), os.O_CREATE|os.O_RDWR, 0o644)
+	lf, err := os.OpenFile(filepath.Join(s.Dir, lockFile), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return fmt.Errorf("open lock file: %w", err)
 	}
@@ -91,10 +91,32 @@ func (s *Store) writeLocked(tasks []*Task) error {
 		return err
 	}
 	tmp := s.path() + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path())
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	// fsync before rename so a power loss cannot lose acknowledged state.
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, s.path()); err != nil {
+		return err
+	}
+	// fsync the directory so the rename itself is durable.
+	dir, err := os.Open(s.Dir)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 
 // Load reads all tasks. A missing queue file yields an empty slice.
@@ -169,6 +191,31 @@ func (s *Store) Remove(id string) error {
 		}
 		return kept, nil
 	})
+}
+
+// ClaimDue atomically transitions a task from Queued to Running.
+// It is the compare-and-swap that prevents double dispatch when multiple
+// daemon instances race on the same task. Returns an error when the task
+// is missing or no longer Queued (another instance claimed it).
+func (s *Store) ClaimDue(id string) (*Task, error) {
+	var claimed *Task
+	err := s.mutate(func(tasks []*Task) ([]*Task, error) {
+		for i, t := range tasks {
+			if t.ID == id {
+				if t.Status != Queued {
+					return nil, fmt.Errorf("task %s already claimed (status %s)", id, t.Status)
+				}
+				t.Status = Running
+				claimed = tasks[i]
+				return tasks, nil
+			}
+		}
+		return nil, fmt.Errorf("task %s not found", id)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return claimed, nil
 }
 
 // Find returns the task with the given ID, or an error.

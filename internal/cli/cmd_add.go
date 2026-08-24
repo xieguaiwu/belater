@@ -84,9 +84,12 @@ func cmdAdd(args []string) int {
 	if scheduleFlags > 1 {
 		return usageError(fs, "--at、--delay、--now 互斥，只选一种")
 	}
+	// Times are interpreted in the billing timezone (Asia/Shanghai), not the
+	// machine local zone, so peak/off-peak labels stay correct everywhere.
+	schedLoc := sch.Location
 	switch {
 	case *at != "":
-		runAt = parseHHMM(*at, now)
+		runAt = parseHHMM(*at, now, schedLoc)
 		if runAt.IsZero() {
 			return usageError(fs, "--at 格式应为 HH:MM")
 		}
@@ -111,8 +114,15 @@ func cmdAdd(args []string) int {
 		timeoutSec = int(d.Seconds())
 	}
 
-	if *every != "" && parseHHMM(*every, now).IsZero() {
-		return usageError(fs, "--every 格式应为 HH:MM")
+	everyWarn := false
+	if *every != "" {
+		everyTime := parseHHMM(*every, now, schedLoc)
+		if everyTime.IsZero() {
+			return usageError(fs, "--every 格式应为 HH:MM")
+		}
+		if sch.KindAt(everyTime) == schedule.KindPeak {
+			everyWarn = true
+		}
 	}
 
 	taskName := *name
@@ -177,8 +187,11 @@ func cmdAdd(args []string) int {
 	if isPi {
 		fmt.Printf("  pi-agent 任务: %s\n", command)
 	}
-	if runAt.Equal(now) && !*nowFlag {
+	if runAt.Equal(now) && !*nowFlag && sch.KindAt(now) == schedule.KindOffPeak {
 		fmt.Println("  当前已是空闲时段，任务将在调度器下次 tick 时执行")
+	}
+	if everyWarn {
+		fmt.Printf("  警告: --every %s 落在高峰时段，将按 1.0x 价格计费\n", *every)
 	}
 	if !*nowFlag && *at == "" && *delay == "" {
 		fmt.Println("  提示: 运行 belater daemon 或 belater daemon --install 来执行队列")
@@ -186,8 +199,8 @@ func cmdAdd(args []string) int {
 	return 0
 }
 
-// parseHHMM parses "HH:MM" as today or tomorrow (if already past).
-func parseHHMM(s string, now time.Time) time.Time {
+// parseHHMM parses "HH:MM" in loc as today or tomorrow (if already past).
+func parseHHMM(s string, now time.Time, loc *time.Location) time.Time {
 	var hh, mm int
 	if _, err := fmt.Sscanf(s, "%d:%d", &hh, &mm); err != nil {
 		return time.Time{}
@@ -195,7 +208,6 @@ func parseHHMM(s string, now time.Time) time.Time {
 	if hh < 0 || hh > 23 || mm < 0 || mm > 59 {
 		return time.Time{}
 	}
-	loc := now.Location()
 	t := time.Date(now.Year(), now.Month(), now.Day(), hh, mm, 0, 0, loc)
 	if !t.After(now) {
 		t = t.AddDate(0, 0, 1)

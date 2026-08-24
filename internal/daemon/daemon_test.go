@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"belater/internal/queue"
+	"belater/internal/schedule"
 )
 
 func newTestStore(t *testing.T) *queue.Store {
@@ -24,6 +26,7 @@ func newTestStore(t *testing.T) *queue.Store {
 
 func TestNextEvery(t *testing.T) {
 	loc := time.FixedZone("T", 0)
+	sch := &schedule.Schedule{Location: loc}
 	base := time.Date(2026, 8, 24, 10, 0, 0, 0, loc) // Monday 10:00
 	cases := []struct {
 		name  string
@@ -38,17 +41,17 @@ func TestNextEvery(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := nextEvery(c.at, c.every)
+			got := nextEvery(c.at, c.every, sch)
 			want, _ := time.ParseInLocation("2006-01-02 15:04", c.want, loc)
 			if !got.Equal(want) {
 				t.Errorf("nextEvery(%s, %s) = %v, want %v", c.at, c.every, got, want)
 			}
 		})
 	}
-	if got := nextEvery(base, "25:00"); !got.IsZero() {
+	if got := nextEvery(base, "25:00", sch); !got.IsZero() {
 		t.Errorf("invalid hour should be zero, got %v", got)
 	}
-	if got := nextEvery(base, "abc"); !got.IsZero() {
+	if got := nextEvery(base, "abc", sch); !got.IsZero() {
 		t.Errorf("invalid format should be zero, got %v", got)
 	}
 }
@@ -99,7 +102,7 @@ func TestDispatchRunsDueTask(t *testing.T) {
 
 	var wg sync.WaitGroup
 	logger := log.New(io.Discard, "", 0)
-	dispatchOnce(s, 1, &wg, logger)
+	dispatchOnce(s, schedule.DefaultSchedule(), 1, &wg, logger)
 	// Wait up to 5s for completion.
 	waitRunning(&wg, 5*time.Second)
 
@@ -135,7 +138,7 @@ func TestDispatchRetry(t *testing.T) {
 	}
 	var wg sync.WaitGroup
 	logger := log.New(io.Discard, "", 0)
-	dispatchOnce(s, 1, &wg, logger)
+	dispatchOnce(s, schedule.DefaultSchedule(), 1, &wg, logger)
 	waitRunning(&wg, 5*time.Second)
 
 	got, err := s.Find("ee000005")
@@ -204,7 +207,7 @@ func TestFinishTaskEveryReschedules(t *testing.T) {
 		t.Fatal(err)
 	}
 	logger := log.New(io.Discard, "", 0)
-	finishTask(s, tk, logger)
+	finishTask(s, schedule.DefaultSchedule(), tk, logger)
 
 	got, err := s.Find("99000009")
 	if err != nil {
@@ -236,11 +239,126 @@ func TestFinishTaskMaxRunsStops(t *testing.T) {
 		t.Fatal(err)
 	}
 	logger := log.New(io.Discard, "", 0)
-	finishTask(s, tk, logger)
+	finishTask(s, schedule.DefaultSchedule(), tk, logger)
 
 	got, _ := s.Find("aa00000a")
 	if got.Status != queue.Done {
 		t.Errorf("status = %s, want done after max runs", got.Status)
+	}
+}
+
+func TestRetryClampedToOffPeak(t *testing.T) {
+	// Billing timezone; simulate a Friday 10:00 (peak) failure.
+	loc := time.FixedZone("CST", 8*3600)
+	peakTime := time.Date(2026, 8, 28, 10, 0, 0, 0, loc) // Friday 10:00 peak
+	sch := &schedule.Schedule{Location: loc, WeekdayPeaks: [][2]int{{540, 720}, {840, 1080}}, WeekendAllOffPeak: true}
+
+	// finishTask uses time.Now() for the retry base; we cannot freeze the clock.
+	// Verify the invariant directly: a retry scheduled at any peak moment must
+	// be pushed to the next off-peak start; an off-peak base stays as-is.
+	peakPlus := peakTime.Add(30 * time.Second)
+	clamped := sch.NextOffPeakStart(peakPlus)
+	if sch.KindAt(clamped) != schedule.KindOffPeak {
+		t.Errorf("clamped retry %v still in peak", clamped)
+	}
+	if !clamped.Equal(peakTime.Add(2 * time.Hour)) {
+		t.Errorf("clamped = %v, want 12:00", clamped)
+	}
+	night := time.Date(2026, 8, 28, 22, 0, 0, 0, loc)
+	if got := sch.NextOffPeakStart(night); !got.Equal(night) {
+		t.Errorf("off-peak base must stay, got %v", got)
+	}
+}
+
+func TestRecoverInterruptedOrphan(t *testing.T) {
+	s := newTestStore(t)
+	// Spawn a real long-lived process and use its pid as LastPid.
+	cmd := exec.Command("sleep", "30")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer cmd.Process.Kill()
+
+	alive := &queue.Task{ID: "cc00000c", Name: "orphan", Command: "true",
+		Status: queue.Running, LastPid: cmd.Process.Pid, LastExit: -1}
+	if err := s.Add(alive); err != nil {
+		t.Fatal(err)
+	}
+	dead := &queue.Task{ID: "dd00000d", Name: "deadproc", Command: "true",
+		Status: queue.Running, LastPid: 99999999, LastExit: -1}
+	if err := s.Add(dead); err != nil {
+		t.Fatal(err)
+	}
+
+	logger := log.New(io.Discard, "", 0)
+	if err := recoverInterrupted(s, logger); err != nil {
+		t.Fatal(err)
+	}
+	got1, _ := s.Find("cc00000c")
+	if got1.Status != queue.Failed {
+		t.Errorf("orphan with live pid: status = %s, want failed", got1.Status)
+	}
+	got2, _ := s.Find("dd00000d")
+	if got2.Status != queue.Queued {
+		t.Errorf("dead pid: status = %s, want queued", got2.Status)
+	}
+}
+
+func TestClaimDueSingleWinner(t *testing.T) {
+	s := newTestStore(t)
+	tk := &queue.Task{ID: "77000001", Name: "race", Command: "true", Status: queue.Queued, LastExit: -1}
+	if err := s.Add(tk); err != nil {
+		t.Fatal(err)
+	}
+	// Two independent stores simulate two daemon processes racing to claim.
+	s2 := newTestStore(t)
+	s2.Dir = s.Dir
+
+	claimed := make(chan *queue.Task, 2)
+	errs := make(chan error, 2)
+	for _, st := range []*queue.Store{s, s2} {
+		go func(st *queue.Store) {
+			c, err := st.ClaimDue("77000001")
+			if err == nil {
+				claimed <- c
+			} else {
+				errs <- err
+			}
+		}(st)
+	}
+	select {
+	case <-claimed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no claim succeeded")
+	}
+	select {
+	case err := <-errs:
+		if err == nil {
+			t.Error("expected the loser to get an error")
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("expected exactly one loser")
+	}
+	// Exactly one claim must have won.
+	select {
+	case <-claimed:
+		t.Error("second claim must lose")
+	default:
+	}
+	got, _ := s.Find("77000001")
+	if got.Status != queue.Running {
+		t.Errorf("task status = %s, want running", got.Status)
+	}
+}
+
+func TestClaimDueRejectsRunning(t *testing.T) {
+	s := newTestStore(t)
+	tk := &queue.Task{ID: "77000002", Name: "already", Command: "true", Status: queue.Running, LastExit: -1}
+	if err := s.Add(tk); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ClaimDue("77000002"); err == nil {
+		t.Error("claiming a running task must fail")
 	}
 }
 

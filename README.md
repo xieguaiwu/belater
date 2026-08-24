@@ -101,6 +101,8 @@ belater daemon --uninstall
 
 每次运行检查一次队列，执行到期任务并等待完成后退出（上限 15 分钟）。
 
+> ⚠️ **方式 1 与方式 2 互斥**：调度器持有单实例锁（`daemon.lock`），同时跑两个调度器（如 systemd 服务 + cron --once）时，后启动者会报错退出——防止同一任务被派发两次。切换方式前先停掉另一个（`systemctl --user stop belater` 或移除 cron 行）。
+
 ### 方式 3：前台
 
 ```bash

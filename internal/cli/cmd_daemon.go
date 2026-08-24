@@ -75,10 +75,8 @@ func cmdDaemon(args []string) int {
 }
 
 func runOnce(st *queue.Store, tick time.Duration, maxParallel int) int {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
-	defer cancel()
 	fmt.Printf("belater daemon --once: 检查队列 (tick %s, max-parallel %d)\n", tick, maxParallel)
-	err := daemon.Run(ctx, daemon.Config{
+	err := daemon.Run(context.Background(), daemon.Config{
 		Store:       st,
 		Schedule:    defaultSchedule(),
 		Tick:        tick,
