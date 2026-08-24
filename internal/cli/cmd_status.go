@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"belater/internal/daemon"
 	"belater/internal/queue"
 	"belater/internal/schedule"
 )
@@ -77,6 +78,14 @@ func cmdStatus(args []string) int {
 		fmt.Printf("现在就是空闲时段 — 新任务将立即排队执行\n")
 	} else {
 		fmt.Printf("今日下次空闲: %s (%s 后)\n", next.Format("15:04"), fmtDuration(nextIn))
+	}
+
+	// Scheduler liveness: does anything hold the instance lock?
+	dir := stateDir()
+	if daemon.InstanceLockHeld(dir) {
+		fmt.Println("调度器: 运行中 — 到期任务会自动执行")
+	} else {
+		fmt.Println("调度器: 未运行 — 到期任务不会执行 (运行 belater daemon 或 belater daemon --install)")
 	}
 	fmt.Printf("队列: %d 待执行 · %d 运行中 · %d 已完成\n", queued, running, done)
 	return 0

@@ -41,7 +41,7 @@ belater list
 
 | 命令 | 说明 |
 |:---|:---|
-| `belater status` | 当前计费窗口 + 下次切换倒计时 + 队列概况 |
+| `belater status` | 当前计费窗口 + 下次切换倒计时 + **调度器运行状态** + 队列概况 |
 | `belater add <命令...>` | 入队任务（默认下次空闲时段执行） |
 | `belater list` | 查看队列（`--all` 含已完成，`--json` 脚本输出） |
 | `belater results` | **已完成任务结果汇总**（状态/退出码/耗时/完成时间，`--days N`、`--json`） |

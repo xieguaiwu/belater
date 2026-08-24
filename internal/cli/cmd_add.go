@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"belater/internal/daemon"
 	"belater/internal/queue"
 	"belater/internal/schedule"
 )
@@ -204,7 +205,11 @@ func cmdAdd(args []string) int {
 		fmt.Printf("  警告: --every %s 落在高峰时段，将按 1.0x 价格计费\n", *every)
 	}
 	if !*nowFlag && *at == "" && *delay == "" {
-		fmt.Println("  提示: 运行 belater daemon 或 belater daemon --install 来执行队列")
+		if daemon.InstanceLockHeld(stateDir()) {
+			fmt.Println("  调度器已在运行 — 任务将自动执行")
+		} else {
+			fmt.Println("  提示: 运行 belater daemon 或 belater daemon --install 来执行队列")
+		}
 	}
 	return 0
 }

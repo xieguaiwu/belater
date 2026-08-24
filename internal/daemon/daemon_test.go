@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -383,6 +384,26 @@ func TestOnDoneHookRuns(t *testing.T) {
 	want := "ee00000e/done/0"
 	if strings.TrimSpace(string(data)) != want {
 		t.Errorf("hook env = %q, want %q", data, want)
+	}
+}
+
+func TestInstanceLockHeld(t *testing.T) {
+	dir := t.TempDir()
+	if InstanceLockHeld(dir) {
+		t.Error("fresh dir must not report a held lock")
+	}
+	// Hold the lock the same way a running daemon does.
+	lf, err := os.OpenFile(filepath.Join(dir, "daemon.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lf.Close()
+	if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+	if !InstanceLockHeld(dir) {
+		t.Error("held lock must be detected")
 	}
 }
 

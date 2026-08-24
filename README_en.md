@@ -32,7 +32,7 @@ belater log <id>          # per-task log with metadata header
 
 | Command | Description |
 |:---|:---|
-| `belater status` | Current window, next switch, queue summary |
+| `belater status` | Current window, next switch, **scheduler liveness**, queue summary |
 | `belater add <cmd...>` | Enqueue (default: next off-peak start) |
 | `belater list` | Show queue (`--all`, `--json`) |
 | `belater results` | Finished tasks: status/exit code/duration (`--days N`, `--json`) |

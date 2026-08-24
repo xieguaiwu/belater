@@ -92,13 +92,31 @@ func acquireInstanceLock(dir string, logger *log.Logger) (func(), error) {
 	}
 	if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		lf.Close()
-		return nil, fmt.Errorf("另一个 belater daemon 实例正在运行（%s 被占用）", path)
+		return nil, fmt.Errorf("另一个 belater daemon 实例正在运行（%s 被占用）\n  任务会由现有调度器自动执行，无需再次启动。\n  查看: belater status 或 systemctl --user status belater\n  停止服务: systemctl --user stop belater 或 belater daemon --uninstall", path)
 	}
 	logger.Printf("instance lock acquired: %s", path)
 	return func() {
 		syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
 		lf.Close()
 	}, nil
+}
+
+// InstanceLockHeld reports whether another daemon currently holds the
+// instance lock. Used by `belater status` to show scheduler liveness.
+func InstanceLockHeld(dir string) bool {
+	path := filepath.Join(dir, "daemon.lock")
+	lf, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return false
+	}
+	defer lf.Close()
+	err = syscall.Flock(int(lf.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if err == nil {
+		// Lock acquired: nobody holds it. Release immediately.
+		syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+		return false
+	}
+	return true
 }
 
 // recoverInterrupted resets tasks left in Running state by a crashed daemon.
