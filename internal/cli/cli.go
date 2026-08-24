@@ -139,7 +139,12 @@ func fmtDuration(d time.Duration) string {
 	if hours > 0 || days > 0 {
 		parts = append(parts, fmt.Sprintf("%dh", hours))
 	}
-	parts = append(parts, fmt.Sprintf("%dm", mins))
+	if mins > 0 {
+		parts = append(parts, fmt.Sprintf("%dm", mins))
+	}
+	if len(parts) == 0 {
+		return "0s"
+	}
 	return strings.Join(parts, " ")
 }
 

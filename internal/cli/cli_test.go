@@ -66,9 +66,9 @@ func TestFmtDuration(t *testing.T) {
 }
 
 func TestFmtName(t *testing.T) {
-	long := "这是一段非常长的任务名称用来测试截断逻辑是否正常工作"
+	long := "这是一段非常长的任务名称用来测试截断逻辑是否正常工作超过二十八字符"
 	if got := fmtName(long); len([]rune(got)) != 28 {
-		t.Errorf("fmtName length = %d, want 28", len([]rune(got)))
+		t.Errorf("fmtName length = %d, want 28 (got %q)", len([]rune(got)), got)
 	}
 	if got := fmtName("short"); got != "short" {
 		t.Errorf("fmtName(short) = %s", got)
