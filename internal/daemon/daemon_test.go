@@ -192,6 +192,58 @@ func TestGCRemovesOldFinished(t *testing.T) {
 	}
 }
 
+func TestFinishTaskEveryReschedules(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now()
+	tk := &queue.Task{
+		ID: "99000009", Name: "daily", Command: "true",
+		Every: "02:00", MaxRuns: 3, Status: queue.Running,
+		CreatedAt: now, LastExit: -1,
+	}
+	if err := s.Add(tk); err != nil {
+		t.Fatal(err)
+	}
+	logger := log.New(io.Discard, "", 0)
+	finishTask(s, tk, logger)
+
+	got, err := s.Find("99000009")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != queue.Queued {
+		t.Errorf("status = %s, want queued (rescheduled)", got.Status)
+	}
+	if got.Runs != 1 {
+		t.Errorf("runs = %d, want 1", got.Runs)
+	}
+	// Next 02:00 must be strictly after the finish time.
+	if !got.RunAt.After(now) {
+		t.Errorf("RunAt = %v, want after %v", got.RunAt, now)
+	}
+	if got.RunAt.Hour() != 2 || got.RunAt.Minute() != 0 {
+		t.Errorf("RunAt = %v, want 02:00", got.RunAt)
+	}
+}
+
+func TestFinishTaskMaxRunsStops(t *testing.T) {
+	s := newTestStore(t)
+	tk := &queue.Task{
+		ID: "aa00000a", Name: "daily", Command: "true",
+		Every: "02:00", MaxRuns: 1, Status: queue.Running,
+		CreatedAt: time.Now(), LastExit: -1,
+	}
+	if err := s.Add(tk); err != nil {
+		t.Fatal(err)
+	}
+	logger := log.New(io.Discard, "", 0)
+	finishTask(s, tk, logger)
+
+	got, _ := s.Find("aa00000a")
+	if got.Status != queue.Done {
+		t.Errorf("status = %s, want done after max runs", got.Status)
+	}
+}
+
 func readAll(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	return string(data), err

@@ -30,8 +30,8 @@ func Run(t *queue.Task, logPath string) Result {
 // RunWithWriter is Run with an extra live-output writer (e.g. os.Stdout).
 // Every log line gets a [HH:MM:SS] prefix. On timeout the process group is
 // killed so child processes do not survive.
-func RunWithWriter(t *queue.Task, logPath string, live io.Writer) Result {
-	res := Result{ExitCode: -1, StartedAt: time.Now()}
+func RunWithWriter(t *queue.Task, logPath string, live io.Writer) (res Result) {
+	res = Result{ExitCode: -1, StartedAt: time.Now()}
 	defer func() { res.FinishedAt = time.Now() }()
 
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
