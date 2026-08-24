@@ -14,7 +14,7 @@ import (
 )
 
 // Version is the tool version.
-const Version = "0.1.1"
+const Version = "0.2.0"
 
 // Main dispatches subcommands and returns the process exit code.
 func Main(args []string) int {
@@ -30,6 +30,8 @@ func Main(args []string) int {
 		return cmdAdd(rest)
 	case "list":
 		return cmdList(rest)
+	case "results":
+		return cmdResults(rest)
 	case "rm":
 		return cmdRemove(rest)
 	case "pause":
@@ -67,6 +69,7 @@ func printHelp(w *os.File) {
   belater status              查看当前计费窗口与队列概况
   belater add <命令...>       入队任务（默认下次空闲时段执行）
   belater list                查看队列
+  belater results              查看已完成任务的结果汇总
   belater rm <id>             删除任务
   belater pause <id>          暂停任务
   belater resume <id>         恢复任务
@@ -81,6 +84,7 @@ func printHelp(w *os.File) {
   belater add --pi "重构 auth 模块并补充测试"
   belater add --delay 2h ./long_task.sh
   belater add --every 02:00 --max-runs 7 --pi "生成今日代码审查报告"
+  belater add --notify --pi "跑完整测试矩阵"   # 完成后桌面通知
   belater daemon --once       # 配合 cron 每 5 分钟检查一次
 
 环境变量:

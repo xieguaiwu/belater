@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"time"
 
+	"belater/internal/daemon"
 	"belater/internal/queue"
 )
 
@@ -215,6 +217,12 @@ func cmdRun(args []string) int {
 	if res.ExitCode != 0 {
 		return 1
 	}
+
+	// Foreground runs also honor the OnDone hook.
+	if t.OnDone != "" {
+		hookLogger := log.New(os.Stderr, "", log.LstdFlags)
+		daemon.RunOnDoneHook(t, st.LogPath(t.ID), hookLogger)
+	}
 	return 0
 }
 
@@ -225,10 +233,23 @@ func cmdLog(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if fs.NArg() != 1 {
+	rest := fs.Args()
+	if len(rest) == 0 {
 		return usageError(fs, "需要一个任务 ID")
 	}
-	id := fs.Arg(0)
+	id := rest[0]
+	// Allow trailing flags after the ID: `belater log <id> --tail 3`.
+	if len(rest) > 1 {
+		tailFs := flag.NewFlagSet("log", flag.ContinueOnError)
+		tail2 := tailFs.Int("tail", 0, "")
+		if err := tailFs.Parse(rest[1:]); err != nil {
+			return 2
+		}
+		if tailFs.NArg() > 0 {
+			return usageError(fs, "多余的位置参数")
+		}
+		*tail = *tail2
+	}
 	if !validID(id) {
 		return usageError(fs, "无效的任务 ID %q", id)
 	}
@@ -238,6 +259,24 @@ func cmdLog(args []string) int {
 		return 1
 	}
 	path := st.LogPath(id)
+
+	// Header with task metadata.
+	task, findErr := st.Find(id)
+	if findErr == nil {
+		var finished string
+		if task.LastRun != nil {
+			finished = task.LastRun.Local().Format("2006-01-02 15:04")
+		} else {
+			finished = "-"
+		}
+		fmt.Printf("%s · %s · 退出码 %d · 耗时 %s · 完成 %s\n",
+			task.ID, task.Status, task.LastExit, fmtDuration(time.Duration(task.DurationSec)*time.Second), finished)
+		fmt.Printf("命令: %s\n", task.Command)
+		fmt.Println("---")
+	} else {
+		fmt.Fprintf(os.Stderr, "警告: 任务 %s 不在队列中（仅显示日志文件）\n", id)
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)

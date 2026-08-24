@@ -362,6 +362,30 @@ func TestClaimDueRejectsRunning(t *testing.T) {
 	}
 }
 
+func TestOnDoneHookRuns(t *testing.T) {
+	s := newTestStore(t)
+	marker := filepath.Join(t.TempDir(), "hook-ran")
+	tk := &queue.Task{
+		ID: "ee00000e", Name: "hooked", Command: "true",
+		OnDone: "echo $BELATER_TASK_ID/$BELATER_TASK_STATUS/$BELATER_TASK_EXIT > " + marker,
+		Status: queue.Running, LastExit: -1,
+	}
+	if err := s.Add(tk); err != nil {
+		t.Fatal(err)
+	}
+	logger := log.New(io.Discard, "", 0)
+	finishTask(s, schedule.DefaultSchedule(), tk, logger)
+
+	data, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("on-done hook did not run: %v", err)
+	}
+	want := "ee00000e/done/0"
+	if strings.TrimSpace(string(data)) != want {
+		t.Errorf("hook env = %q, want %q", data, want)
+	}
+}
+
 func readAll(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	return string(data), err

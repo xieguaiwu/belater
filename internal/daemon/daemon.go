@@ -7,7 +7,9 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -214,6 +216,8 @@ func dispatchOnce(s *queue.Store, sch *schedule.Schedule, maxParallel int, wg *s
 }
 
 // finishTask runs the task and persists the outcome with retry/Every logic.
+// When the task has an OnDone hook, it runs after the outcome is persisted
+// with BELATER_TASK_* env vars (ID, NAME, STATUS, EXIT).
 func finishTask(s *queue.Store, sch *schedule.Schedule, t *queue.Task, logger *log.Logger) {
 	res := runner.Run(t, s.LogPath(t.ID))
 	logger.Printf("task %s (%s) finished: exit=%d err=%v", t.ID, t.Name, res.ExitCode, res.Err)
@@ -221,6 +225,7 @@ func finishTask(s *queue.Store, sch *schedule.Schedule, t *queue.Task, logger *l
 	t.Runs++
 	t.LastRun = &res.FinishedAt
 	t.LastExit = res.ExitCode
+	t.DurationSec = int(res.FinishedAt.Sub(res.StartedAt).Seconds())
 	t.LastPid = res.Pid
 
 	switch {
@@ -253,6 +258,36 @@ func finishTask(s *queue.Store, sch *schedule.Schedule, t *queue.Task, logger *l
 
 	if err := s.Update(t); err != nil {
 		logger.Printf("persist outcome %s: %v", t.ID, err)
+	}
+
+	// Notify hook runs after state is persisted; its own failure is logged
+	// but never changes the task outcome.
+	if t.OnDone != "" {
+		RunOnDoneHook(t, s.LogPath(t.ID), logger)
+	}
+}
+
+// RunOnDoneHook executes the task's OnDone hook with BELATER_TASK_* env vars.
+// Exported so the foreground `belater run` path reuses the same hook logic.
+func RunOnDoneHook(t *queue.Task, logPath string, logger *log.Logger) {
+	hook := exec.Command("/bin/sh", "-c", t.OnDone)
+	env := append(os.Environ(),
+		"BELATER_TASK_ID="+t.ID,
+		"BELATER_TASK_NAME="+t.Name,
+		"BELATER_TASK_STATUS="+string(t.Status),
+		fmt.Sprintf("BELATER_TASK_EXIT=%d", t.LastExit),
+	)
+	hook.Env = env
+	if t.Cwd != "" {
+		hook.Dir = t.Cwd
+	}
+	out, err := hook.CombinedOutput()
+	if err != nil {
+		logger.Printf("on-done hook %s failed: %v: %s", t.ID, err, strings.TrimSpace(string(out)))
+		return
+	}
+	if len(out) > 0 {
+		logger.Printf("on-done hook %s: %s", t.ID, strings.TrimSpace(string(out)))
 	}
 }
 

@@ -3,6 +3,8 @@ package cli
 import (
 	"testing"
 	"time"
+
+	"belater/internal/queue"
 )
 
 func TestShQuote(t *testing.T) {
@@ -72,5 +74,50 @@ func TestFmtName(t *testing.T) {
 	}
 	if got := fmtName("short"); got != "short" {
 		t.Errorf("fmtName(short) = %s", got)
+	}
+}
+
+func TestCollectResults(t *testing.T) {
+	now := time.Now()
+	old := now.Add(-3 * 24 * time.Hour)
+	tasks := []*queue.Task{
+		{ID: "11111111", Name: "new-fail", Status: queue.Failed, LastExit: 1, DurationSec: 30, LastRun: &now},
+		{ID: "22222222", Name: "old-done", Status: queue.Done, LastExit: 0, DurationSec: 5, LastRun: &old},
+		{ID: "33333333", Name: "queued", Status: queue.Queued, LastExit: -1, LastRun: nil},
+		{ID: "44444444", Name: "recent-done", Status: queue.Done, LastExit: 0, DurationSec: 90, LastRun: &now},
+	}
+
+	// Default 7-day window: excludes only non-terminal tasks.
+	rows := collectResults(tasks, 7)
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// Newest first: the two now-tasks before the 3-day-old one.
+	if rows[0].ID != "11111111" && rows[0].ID != "44444444" {
+		t.Errorf("expected recent tasks first, got %s", rows[0].ID)
+	}
+	if rows[1].ID == rows[0].ID {
+		t.Error("duplicate row")
+	}
+	if rows[2].ID != "22222222" {
+		t.Errorf("expected oldest task last, got %s", rows[2].ID)
+	}
+
+	// 1-day window excludes the 3-day-old task.
+	rows = collectResults(tasks, 1)
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows for 1 day, got %d", len(rows))
+	}
+	for _, r := range rows {
+		if r.ID == "22222222" {
+			t.Error("old task must be filtered out")
+		}
+	}
+}
+
+func TestCollectResultsEmpty(t *testing.T) {
+	rows := collectResults(nil, 7)
+	if len(rows) != 0 {
+		t.Errorf("expected empty, got %d", len(rows))
 	}
 }

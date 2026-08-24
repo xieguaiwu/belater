@@ -45,6 +45,8 @@ func cmdAdd(args []string) int {
 	fs.Var(&envs, "env", "环境变量 KEY=VALUE（可重复）")
 	timeout := fs.String("timeout", "", "超时时间（如 30m、2h；0 = 不限）")
 	parallel := fs.Bool("parallel", false, "不占用串行槽位，可与其它任务并行")
+	onDone := fs.String("on-done", "", "任务完成后执行的命令（env: BELATER_TASK_ID/NAME/STATUS/EXIT）")
+	notify := fs.Bool("notify", false, "完成后桌面通知（等价于 --on-done notify-send）")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -145,6 +147,13 @@ func cmdAdd(args []string) int {
 		}
 	}
 
+	if *onDone != "" && *notify {
+		return usageError(fs, "--on-done 与 --notify 互斥，只选一种")
+	}
+	if *notify {
+		*onDone = "notify-send belater \"任务完成: $BELATER_TASK_NAME (exit $BELATER_TASK_EXIT)\""
+	}
+
 	task := &queue.Task{
 		Name:       taskName,
 		Command:    command,
@@ -156,6 +165,7 @@ func cmdAdd(args []string) int {
 		Retries:    *retries,
 		TimeoutSec: timeoutSec,
 		Parallel:   *parallel,
+		OnDone:     *onDone,
 		Status:     queue.Queued,
 		CreatedAt:  now,
 		LastExit:   -1,
