@@ -33,7 +33,7 @@ func Open(dir string) (*Store, error) {
 // path returns the queue file path.
 func (s *Store) path() string { return filepath.Join(s.Dir, queueFile) }
 
-// lock acquires an exclusive flock for the duration of f.
+// lock acquires an exclusive flock and runs f. The caller must already hold s.mu.
 func (s *Store) lock(f func() error) error {
 	lf, err := os.OpenFile(filepath.Join(s.Dir, lockFile), os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
@@ -47,45 +47,70 @@ func (s *Store) lock(f func() error) error {
 	return f()
 }
 
+// mutate runs read-modify-write under the in-process mutex and flock.
+// The read-modify-write cycle is atomic across processes.
+func (s *Store) mutate(f func(tasks []*Task) ([]*Task, error)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lock(func() error {
+		tasks, err := s.readLocked()
+		if err != nil {
+			return err
+		}
+		next, err := f(tasks)
+		if err != nil {
+			return err
+		}
+		return s.writeLocked(next)
+	})
+}
+
+// readLocked loads tasks. Caller must hold s.mu and the flock.
+func (s *Store) readLocked() ([]*Task, error) {
+	data, err := os.ReadFile(s.path())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if len(data) == 0 {
+		return nil, nil
+	}
+	var tasks []*Task
+	if err := json.Unmarshal(data, &tasks); err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+// writeLocked persists tasks atomically. Caller must hold s.mu and the flock.
+func (s *Store) writeLocked(tasks []*Task) error {
+	data, err := json.MarshalIndent(tasks, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := s.path() + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.path())
+}
+
 // Load reads all tasks. A missing queue file yields an empty slice.
 func (s *Store) Load() ([]*Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var tasks []*Task
 	err := s.lock(func() error {
-		data, err := os.ReadFile(s.path())
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return nil
-			}
-			return err
-		}
-		if len(data) == 0 {
-			return nil
-		}
-		return json.Unmarshal(data, &tasks)
+		var err error
+		tasks, err = s.readLocked()
+		return err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("load queue: %w", err)
 	}
 	return tasks, nil
-}
-
-// Save writes tasks atomically (tmp + rename) under flock.
-func (s *Store) Save(tasks []*Task) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.lock(func() error {
-		data, err := json.MarshalIndent(tasks, "", "  ")
-		if err != nil {
-			return err
-		}
-		tmp := s.path() + ".tmp"
-		if err := os.WriteFile(tmp, data, 0o644); err != nil {
-			return err
-		}
-		return os.Rename(tmp, s.path())
-	})
 }
 
 // Add appends a task and persists.
@@ -96,12 +121,9 @@ func (s *Store) Add(t *Task) error {
 	if !ValidStatuses[t.Status] {
 		return fmt.Errorf("invalid status %q", t.Status)
 	}
-	tasks, err := s.Load()
-	if err != nil {
-		return err
-	}
-	tasks = append(tasks, t)
-	return s.Save(tasks)
+	return s.mutate(func(tasks []*Task) ([]*Task, error) {
+		return append(tasks, t), nil
+	})
 }
 
 // Update replaces the task with the same ID, or errors.
@@ -109,38 +131,34 @@ func (s *Store) Update(t *Task) error {
 	if !ValidStatuses[t.Status] {
 		return fmt.Errorf("invalid status %q", t.Status)
 	}
-	tasks, err := s.Load()
-	if err != nil {
-		return err
-	}
-	for i, cur := range tasks {
-		if cur.ID == t.ID {
-			tasks[i] = t
-			return s.Save(tasks)
+	return s.mutate(func(tasks []*Task) ([]*Task, error) {
+		for i, cur := range tasks {
+			if cur.ID == t.ID {
+				tasks[i] = t
+				return tasks, nil
+			}
 		}
-	}
-	return fmt.Errorf("task %s not found", t.ID)
+		return nil, fmt.Errorf("task %s not found", t.ID)
+	})
 }
 
 // Remove deletes a task by ID.
 func (s *Store) Remove(id string) error {
-	tasks, err := s.Load()
-	if err != nil {
-		return err
-	}
-	kept := tasks[:0]
-	found := false
-	for _, t := range tasks {
-		if t.ID == id {
-			found = true
-			continue
+	return s.mutate(func(tasks []*Task) ([]*Task, error) {
+		kept := tasks[:0]
+		found := false
+		for _, t := range tasks {
+			if t.ID == id {
+				found = true
+				continue
+			}
+			kept = append(kept, t)
 		}
-		kept = append(kept, t)
-	}
-	if !found {
-		return fmt.Errorf("task %s not found", id)
-	}
-	return s.Save(kept)
+		if !found {
+			return nil, fmt.Errorf("task %s not found", id)
+		}
+		return kept, nil
+	})
 }
 
 // Find returns the task with the given ID, or an error.
