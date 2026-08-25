@@ -89,7 +89,11 @@ func cmdResults(args []string) int {
 	}
 
 	if len(rows) == 0 {
-		fmt.Printf("最近 %d 天没有已完成的任务（belater list 查看队列）\n", *days)
+		if *days > 0 {
+			fmt.Printf("最近 %d 天没有已完成的任务（belater list 查看队列）\n", *days)
+		} else {
+			fmt.Println("没有已完成的任务（belater list 查看队列）")
+		}
 		return 0
 	}
 
