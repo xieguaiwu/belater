@@ -105,7 +105,14 @@ func cmdAdd(args []string) int {
 	case *nowFlag:
 		runAt = now
 	default:
-		runAt = sch.NextOffPeakStart(now)
+		if *every != "" {
+			// --every implies its own schedule: the first run is the next
+			// occurrence of the every time itself (e.g. --every 02:00 runs
+			// tonight at 02:00), not the next off-peak window.
+			runAt = parseHHMM(*every, now, schedLoc)
+		} else {
+			runAt = sch.NextOffPeakStart(now)
+		}
 	}
 
 	var timeoutSec int

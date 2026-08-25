@@ -141,21 +141,15 @@ func setStatus(args []string, name string, status queue.Status) int {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		return 1
 	}
-	t, err := st.Find(id)
+	// Atomic transition: fails if the scheduler changed the state meanwhile.
+	var from queue.Status
+	if status == queue.Paused {
+		from = queue.Queued
+	} else {
+		from = queue.Paused
+	}
+	t, err := st.CompareAndStatus(id, from, status)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
-		return 1
-	}
-	if status == queue.Paused && t.Status != queue.Queued {
-		fmt.Fprintf(os.Stderr, "错误: 只能暂停 queued 任务（当前 %s）\n", t.Status)
-		return 1
-	}
-	if status == queue.Queued && t.Status != queue.Paused {
-		fmt.Fprintf(os.Stderr, "错误: 只能恢复 paused 任务（当前 %s）\n", t.Status)
-		return 1
-	}
-	t.Status = status
-	if err := st.Update(t); err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		return 1
 	}
@@ -181,18 +175,8 @@ func cmdRun(args []string) int {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		return 1
 	}
-	t, err := st.Find(id)
+	t, err := st.ClaimForRun(id)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
-		return 1
-	}
-	if t.Status == queue.Running {
-		fmt.Fprintf(os.Stderr, "错误: 任务 %s 正在运行\n", t.ID)
-		return 1
-	}
-
-	t.Status = queue.Running
-	if err := st.Update(t); err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		return 1
 	}

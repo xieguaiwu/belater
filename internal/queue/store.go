@@ -218,6 +218,54 @@ func (s *Store) ClaimDue(id string) (*Task, error) {
 	return claimed, nil
 }
 
+// CompareAndStatus atomically transitions a task from one status to another.
+// Returns the updated task, or an error when the task is missing or not in
+// the expected state (another process changed it first).
+func (s *Store) CompareAndStatus(id string, from Status, to Status) (*Task, error) {
+	var out *Task
+	err := s.mutate(func(tasks []*Task) ([]*Task, error) {
+		for i, t := range tasks {
+			if t.ID == id {
+				if t.Status != from {
+					return nil, fmt.Errorf("task %s status is %s, want %s", id, t.Status, from)
+				}
+				t.Status = to
+				out = tasks[i]
+				return tasks, nil
+			}
+		}
+		return nil, fmt.Errorf("task %s not found", id)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ClaimForRun atomically claims a task for foreground execution: any status
+// except Running is accepted (done/failed tasks can be re-run). Prevents a
+// race where the scheduler dispatches the task while `belater run` starts it.
+func (s *Store) ClaimForRun(id string) (*Task, error) {
+	var out *Task
+	err := s.mutate(func(tasks []*Task) ([]*Task, error) {
+		for i, t := range tasks {
+			if t.ID == id {
+				if t.Status == Running {
+					return nil, fmt.Errorf("task %s 正在运行", id)
+				}
+				t.Status = Running
+				out = tasks[i]
+				return tasks, nil
+			}
+		}
+		return nil, fmt.Errorf("task %s not found", id)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Find returns the task with the given ID, or an error.
 func (s *Store) Find(id string) (*Task, error) {
 	tasks, err := s.Load()

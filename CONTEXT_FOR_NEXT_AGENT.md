@@ -2,7 +2,7 @@
 
 ## 项目当前状态
 
-belater v0.2.1 — DeepSeek 峰谷计费延迟执行器（Go 1.25 纯标准库，零第三方依赖）。
+belater v0.2.2 — DeepSeek 峰谷计费延迟执行器（Go 1.25 纯标准库，零第三方依赖）。
 **公开仓库**: https://github.com/xieguaiwu/belater（PUBLIC, master, 8 topics, MIT, CI 全绿）。
 已部署 `~/.local/bin/belater`，systemd 用户服务运行中。
 
@@ -28,10 +28,8 @@ belater v0.2.1 — DeepSeek 峰谷计费延迟执行器（Go 1.25 纯标准库�
 
 - [ ] 计费规则硬编码 `internal/schedule`（DefaultSchedule）——DeepSeek 改规则需改代码；config.json 外部化（v0.3.0 候选）
 - [ ] `--every HH:MM` 首次 RunAt 排下次空闲而非下一个 every 时刻——`--first-at` 选项候选
-- [ ] `belater run <id>` 前台执行不受 daemon.lock 约束（显式用户操作，接受）
-- [ ] CI warning：actions checkout/setup-go Node 20 deprecation（可升版本）
 - [ ] 并发测试 `TestConcurrentAdds` 依赖 flock，慢机可能 flaky
-- [ ] `results --days 0` 语义 = 全部，但空结果提示文案显示"最近 0 天"易误解
+（v0.2.2 已修：pause/resume/run TOCTOU CAS 化；--every 首次语义改为下一个 every 时刻；--pi-args 文档标注；CI actions 升级；results 空文案）
 
 ## 远程资源
 
@@ -44,4 +42,4 @@ GitHub: xieguaiwu/belater（gh CLI 已认证）。
 
 ## 最后更新时间
 
-2026-08-25 11:56
+2026-08-25 12:10

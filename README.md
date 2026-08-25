@@ -57,7 +57,7 @@ belater list
 | 选项 | 说明 |
 |:---|:---|
 | `--pi "提示词"` | pi-agent 模式：构造 `pi -p '提示词'` 执行 |
-| `--pi-args "..."` | 附加 pi 参数（如 `--no-session`、`--model ...`） |
+| `--pi-args "..."` | 附加 pi 参数（按 shell 片段原样拼入，如 `--no-session`、`--model ...`） |
 | `--at HH:MM` | 指定时间（已过则明天；可落在高峰，用户显式指定） |
 | `--delay 2h` | 从现在起延迟执行 |
 | `--now` | 立即排队（等下一个 tick） |

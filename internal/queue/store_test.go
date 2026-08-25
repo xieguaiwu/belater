@@ -169,3 +169,57 @@ func TestLogPath(t *testing.T) {
 		t.Errorf("logs dir missing: %v", err)
 	}
 }
+
+func TestCompareAndStatus(t *testing.T) {
+	s := newTestStore(t)
+	tk := sampleTask()
+	tk.Status = Queued
+	if err := s.Add(tk); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.CompareAndStatus("abc12345", Queued, Paused)
+	if err != nil {
+		t.Fatalf("CAS queued->paused: %v", err)
+	}
+	if got.Status != Paused {
+		t.Errorf("status = %s, want paused", got.Status)
+	}
+	// Wrong source state must fail.
+	if _, err := s.CompareAndStatus("abc12345", Queued, Running); err == nil {
+		t.Error("CAS from wrong state must fail")
+	}
+	// Missing task must fail.
+	if _, err := s.CompareAndStatus("ffffffff", Queued, Running); err == nil {
+		t.Error("CAS on missing task must fail")
+	}
+}
+
+func TestClaimForRun(t *testing.T) {
+	s := newTestStore(t)
+	for i, st := range []Status{Queued, Done, Failed, Paused} {
+		tk := sampleTask()
+		tk.ID = NewID()
+		tk.Status = st
+		if err := s.Add(tk); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.ClaimForRun(tk.ID)
+		if err != nil {
+			t.Fatalf("claim %s: %v", st, err)
+		}
+		if got.Status != Running {
+			t.Errorf("claim from %s: status = %s", st, got.Status)
+		}
+		_ = i
+	}
+	// Claiming a running task must fail.
+	running := sampleTask()
+	running.ID = NewID()
+	running.Status = Running
+	if err := s.Add(running); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ClaimForRun(running.ID); err == nil {
+		t.Error("claiming a running task must fail")
+	}
+}

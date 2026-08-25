@@ -47,7 +47,7 @@ belater log <id>          # per-task log with metadata header
 | Option | Description |
 |:---|:---|
 | `--pi "prompt"` | pi-agent mode: builds `pi -p 'prompt'` |
-| `--pi-args "..."` | Extra pi args (e.g. `--no-session`, `--model ...`) |
+| `--pi-args "..."` | Extra pi args, spliced verbatim into the shell command (e.g. `--no-session`, `--model ...`) |
 | `--at HH:MM` | Wall-clock time (tomorrow if past; may land in peak — explicit) |
 | `--delay 2h` | Run after a delay |
 | `--now` | Queue for the next tick |

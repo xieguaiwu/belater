@@ -2,6 +2,16 @@
 
 All notable changes to belater are documented here.
 
+## [0.2.2] - 2026-08-25
+
+### Fixed
+
+- **pause/resume/run TOCTOU**: state checks and transitions are now atomic (`CompareAndStatus` / `ClaimForRun` compare-and-swap), so the scheduler can no longer dispatch a task between a user command's check and update.
+- `--every HH:MM` first-run semantics: the first run is now the next occurrence of the every time itself (e.g. `--every 02:00` added during the day runs tonight at 02:00), instead of being pushed to the next off-peak window — matching user intuition.
+- `--pi-args` documented as spliced verbatim into the shell command.
+- CI: bump actions/checkout v5, actions/setup-go v6 (Node 20 deprecation).
+- `results` empty message no longer says "最近 0 天" when `--days 0`.
+
 ## [0.2.1] - 2026-08-25
 
 ### Fixed
