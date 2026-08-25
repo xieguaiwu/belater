@@ -78,6 +78,12 @@ func cmdDaemon(args []string) int {
 }
 
 func runOnce(st *queue.Store, tick time.Duration, maxParallel int) int {
+	// Pre-check the instance lock so a conflicting run fails fast with guidance
+	// instead of printing its banner first (Run re-checks atomically).
+	if daemon.InstanceLockHeld(stateDir()) {
+		fmt.Fprintln(os.Stderr, lockConflictHint())
+		return 1
+	}
 	fmt.Printf("belater daemon --once: 检查队列 (tick %s, max-parallel %d)\n", tick, maxParallel)
 	err := daemon.Run(context.Background(), daemon.Config{
 		Store:       st,
@@ -95,6 +101,11 @@ func runOnce(st *queue.Store, tick time.Duration, maxParallel int) int {
 }
 
 func runForever(st *queue.Store, tick time.Duration, maxParallel int) int {
+	// Pre-check the instance lock so the banner never precedes a conflict error.
+	if daemon.InstanceLockHeld(stateDir()) {
+		fmt.Fprintln(os.Stderr, lockConflictHint())
+		return 1
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	fmt.Printf("belater daemon: 调度器运行中 (tick %s, max-parallel %d) — Ctrl+C 退出\n", tick, maxParallel)
@@ -111,6 +122,15 @@ func runForever(st *queue.Store, tick time.Duration, maxParallel int) int {
 	}
 	fmt.Println("调度器已退出")
 	return 0
+}
+
+// lockConflictHint is the actionable message shown when another scheduler
+// instance already holds daemon.lock.
+func lockConflictHint() string {
+	return "错误: 另一个 belater daemon 实例正在运行（daemon.lock 被占用）\n" +
+		"  任务会由现有调度器自动执行，无需再次启动。\n" +
+		"  查看: belater status 或 systemctl --user status belater\n" +
+		"  停止服务: systemctl --user stop belater 或 belater daemon --uninstall"
 }
 
 // installSystemd writes the user unit, reloads, and enables the service.
