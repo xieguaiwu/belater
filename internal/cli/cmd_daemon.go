@@ -78,11 +78,13 @@ func cmdDaemon(args []string) int {
 }
 
 func runOnce(st *queue.Store, tick time.Duration, maxParallel int) int {
-	// Pre-check the instance lock so a conflicting run fails fast with guidance
-	// instead of printing its banner first (Run re-checks atomically).
+	// Pre-check the instance lock: when another scheduler (systemd service,
+	// another --once, or a foreground daemon) already runs, this pass is a
+	// no-op — due tasks are handled by that instance. Exit 0 so cron never
+	// sees a spurious failure. Run re-checks atomically as a safety net.
 	if daemon.InstanceLockHeld(stateDir()) {
-		fmt.Fprintln(os.Stderr, lockConflictHint())
-		return 1
+		fmt.Fprintln(os.Stdout, lockActiveHint())
+		return 0
 	}
 	fmt.Printf("belater daemon --once: 检查队列 (tick %s, max-parallel %d)\n", tick, maxParallel)
 	err := daemon.Run(context.Background(), daemon.Config{
@@ -101,10 +103,13 @@ func runOnce(st *queue.Store, tick time.Duration, maxParallel int) int {
 }
 
 func runForever(st *queue.Store, tick time.Duration, maxParallel int) int {
-	// Pre-check the instance lock so the banner never precedes a conflict error.
+	// Pre-check the instance lock: a manual `belater daemon` while the
+	// systemd service (or another instance) runs is a normal state — the
+	// queue is already being serviced. Inform and exit 0 instead of
+	// reporting an error.
 	if daemon.InstanceLockHeld(stateDir()) {
-		fmt.Fprintln(os.Stderr, lockConflictHint())
-		return 1
+		fmt.Fprintln(os.Stdout, lockActiveHint())
+		return 0
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -124,11 +129,11 @@ func runForever(st *queue.Store, tick time.Duration, maxParallel int) int {
 	return 0
 }
 
-// lockConflictHint is the actionable message shown when another scheduler
-// instance already holds daemon.lock.
-func lockConflictHint() string {
-	return "错误: 另一个 belater daemon 实例正在运行（daemon.lock 被占用）\n" +
-		"  任务会由现有调度器自动执行，无需再次启动。\n" +
+// lockActiveHint is the informational message shown when another scheduler
+// instance already holds daemon.lock. This is a normal state — the queue is
+// being serviced — so the message is neutral and the exit code is 0.
+func lockActiveHint() string {
+	return "调度器已在运行（daemon.lock 被占用）— 任务会由现有调度器自动执行，无需再次启动。\n" +
 		"  查看: belater status 或 systemctl --user status belater\n" +
 		"  停止服务: systemctl --user stop belater 或 belater daemon --uninstall"
 }

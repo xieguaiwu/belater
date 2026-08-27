@@ -2,6 +2,17 @@
 
 All notable changes to belater are documented here.
 
+## [0.2.3] - 2026-08-27
+
+### Fixed
+
+- **Lock conflict misreported as an error**: `belater daemon` / `belater daemon --once`
+  printed `错误: 另一个 belater daemon 实例正在运行` and exited 1 whenever a scheduler
+  (e.g. the systemd service) was already running. That is a normal state — the queue
+  is already being serviced — so it now prints a neutral info message
+  (`调度器已在运行 …`) and exits 0. `--once` under cron no longer looks like a
+  failure when the main daemon holds the lock.
+
 ## [0.2.2] - 2026-08-25
 
 ### Fixed

@@ -39,7 +39,7 @@ belater log <id>          # per-task log with metadata header
 | `belater run <id>` | Run immediately in the foreground |
 | `belater rm <id>` / `pause` / `resume` | Manage tasks |
 | `belater log <id>` | Task log (`--tail N` also works after the ID) |
-| `belater daemon` | Scheduler (`--once` for cron; `--install`/`--uninstall` for systemd) |
+| `belater daemon` | Scheduler (`--once` for cron; prints a hint and exits 0 when another scheduler already runs; `--install`/`--uninstall` for systemd) |
 | `belater config` | Show scheduling config |
 
 ### add options

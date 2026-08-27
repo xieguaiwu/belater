@@ -49,7 +49,7 @@ belater list
 | `belater rm <id>` | 删除任务 |
 | `belater pause <id>` / `resume <id>` | 暂停 / 恢复 |
 | `belater log <id>` | 查看任务日志（头部含状态/退出码/耗时元信息；`--tail N`，可放 ID 后） |
-| `belater daemon` | 运行调度器（`--once` 配合 cron） |
+| `belater daemon` | 运行调度器（`--once` 配合 cron；已有调度器运行时打印提示并以 0 退出） |
 | `belater config` | 显示调度配置 |
 
 ### add 选项

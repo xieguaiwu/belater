@@ -1,16 +1,16 @@
-# Graph Report - belater  (2026-08-25)
+# Graph Report - belater  (2026-08-27)
 
 ## Corpus Check
-- 24 files · ~15,474 words
+- 25 files · ~15,856 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 249 nodes · 538 edges · 13 communities (12 shown, 1 thin omitted)
-- Extraction: 82% EXTRACTED · 18% INFERRED · 0% AMBIGUOUS · INFERRED: 97 edges (avg confidence: 0.8)
+- 256 nodes · 551 edges · 14 communities (13 shown, 1 thin omitted)
+- Extraction: 82% EXTRACTED · 18% INFERRED · 0% AMBIGUOUS · INFERRED: 101 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a335bb4d`
+- Built from commit: `8523fe86`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -25,6 +25,7 @@
 - Global Constraints
 - Changelog
 - DefaultSchedule
+- cmd_daemon.go
 - runTask
 - belater
 - CONTEXT_FOR_NEXT_AGENT.md
@@ -44,23 +45,23 @@
 ## Surprising Connections (you probably didn't know these)
 - `main()` --calls--> `Main()`  [INFERRED]
   main.go → internal/cli/cli.go
+- `Main()` --calls--> `cmdDaemon()`  [INFERRED]
+  internal/cli/cli.go → internal/cli/cmd_daemon.go
 - `Main()` --calls--> `cmdResults()`  [INFERRED]
   internal/cli/cli.go → internal/cli/cmd_results.go
-- `openStore()` --calls--> `Open()`  [INFERRED]
-  internal/cli/cli.go → internal/queue/store.go
-- `cmdResults()` --calls--> `openStore()`  [INFERRED]
-  internal/cli/cmd_results.go → internal/cli/cli.go
-- `defaultSchedule()` --calls--> `DefaultSchedule()`  [INFERRED]
-  internal/cli/cli.go → internal/schedule/window.go
+- `runForever()` --calls--> `stateDir()`  [INFERRED]
+  internal/cli/cmd_daemon.go → internal/cli/cli.go
+- `runOnce()` --calls--> `stateDir()`  [INFERRED]
+  internal/cli/cmd_daemon.go → internal/cli/cli.go
 
 ## Import Cycles
 - None detected.
 
-## Communities (13 total, 1 thin omitted)
+## Communities (14 total, 1 thin omitted)
 
 ### Community 0 - "Main"
-Cohesion: 0.12
-Nodes (35): File, FlagSet, defaultSchedule(), fmtDuration(), fmtRunAt(), Duration, Time, Main() (+27 more)
+Cohesion: 0.11
+Nodes (30): envList, File, FlagSet, defaultSchedule(), fmtDuration(), fmtRunAt(), Duration, Time (+22 more)
 
 ### Community 1 - "daemon_test.go"
 Cohesion: 0.13
@@ -79,8 +80,8 @@ Cohesion: 0.07
 Nodes (25): add 选项, belater — DeepSeek 峰谷计费延迟执行器, add options, belater — Defer big tasks to DeepSeek off-peak billing hours, Commands, Design, Install, License (+17 more)
 
 ### Community 5 - "cmdResults"
-Cohesion: 0.13
-Nodes (18): envList, resultRow, fmtName(), T, TestCollectResults(), TestCollectResultsEmpty(), TestFmtDuration(), TestFmtName() (+10 more)
+Cohesion: 0.23
+Nodes (13): resultRow, fmtName(), T, TestCollectResults(), TestCollectResultsEmpty(), TestFmtDuration(), TestFmtName(), TestParseHHMM() (+5 more)
 
 ### Community 6 - "newTestStore"
 Cohesion: 0.45
@@ -91,12 +92,16 @@ Cohesion: 0.18
 Nodes (10): belater — DeepSeek 峰谷计费延迟执行器 Implementation Plan, Global Constraints, Self-Review 记录（写完计划时执行）, Task 1: 项目骨架 + schedule 包（核心窗口逻辑）, Task 2: queue 包（任务模型 + JSON 持久化）, Task 3: runner 包（任务执行 + 日志 + 重试）, Task 4: daemon 包（调度循环 + 派发 + 崩溃恢复）, Task 5: CLI 子命令 (+2 more)
 
 ### Community 8 - "Changelog"
-Cohesion: 0.17
-Nodes (11): [0.1.0] - 2026-08-24, [0.1.1] - 2026-08-24, [0.2.0] - 2026-08-24, [0.2.1] - 2026-08-25, [0.2.2] - 2026-08-25, Added, Added, Changelog (+3 more)
+Cohesion: 0.14
+Nodes (13): [0.1.0] - 2026-08-24, [0.1.1] - 2026-08-24, [0.2.0] - 2026-08-24, [0.2.1] - 2026-08-25, [0.2.2] - 2026-08-25, [0.2.3] - 2026-08-27, Added, Added (+5 more)
 
 ### Community 9 - "DefaultSchedule"
 Cohesion: 0.51
 Nodes (9): DefaultSchedule(), T, Time, mustTime(), TestDescribe(), TestKindAt(), TestMultiplier(), TestNextOffPeakStart() (+1 more)
+
+### Community 10 - "cmd_daemon.go"
+Cohesion: 0.27
+Nodes (14): cmdDaemon(), Duration, installSystemd(), lockActiveHint(), mustHome(), runForever(), runOnce(), systemctl() (+6 more)
 
 ### Community 11 - "runTask"
 Cohesion: 0.18
@@ -104,10 +109,10 @@ Nodes (22): Cmd, runTaskForeground(), buildEnv(), Time, Writer, inPath(), killPr
 
 ### Community 13 - "CONTEXT_FOR_NEXT_AGENT.md"
 Cohesion: 0.22
-Nodes (7): 已验证的关键行为, 最后一次完成的工作（2026-08-25）, 最后更新时间, 知识图谱, 远程资源, 遗留问题 / 待办, 项目当前状态
+Nodes (7): 已验证的关键行为, 最后一次完成的工作（2026-08-27）, 最后更新时间, 知识图谱, 远程资源, 遗留问题 / 待办, 项目当前状态
 
 ## Knowledge Gaps
-- **42 isolated node(s):** `belater`, `Fixed`, `Fixed`, `Added`, `Added` (+37 more)
+- **43 isolated node(s):** `belater`, `Fixed`, `Fixed`, `Fixed`, `Added` (+38 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **1 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -115,16 +120,16 @@ Nodes (7): 已验证的关键行为, 最后一次完成的工作（2026-08-25）
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Task` connect `Store` to `daemon_test.go`, `runTask`, `cmdResults`, `newTestStore`?**
-  _High betweenness centrality (0.169) - this node is a cross-community bridge._
-- **Why does `Store` connect `Store` to `Main`, `daemon_test.go`, `newTestStore`?**
-  _High betweenness centrality (0.146) - this node is a cross-community bridge._
+  _High betweenness centrality (0.163) - this node is a cross-community bridge._
+- **Why does `Store` connect `Store` to `Main`, `daemon_test.go`, `cmd_daemon.go`, `newTestStore`?**
+  _High betweenness centrality (0.143) - this node is a cross-community bridge._
 - **Why does `Schedule` connect `Schedule` to `Main`, `daemon_test.go`, `DefaultSchedule`?**
-  _High betweenness centrality (0.093) - this node is a cross-community bridge._
+  _High betweenness centrality (0.090) - this node is a cross-community bridge._
 - **Are the 13 inferred relationships involving `DefaultSchedule()` (e.g. with `defaultSchedule()` and `Run()`) actually correct?**
   _`DefaultSchedule()` has 13 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 12 inferred relationships involving `Main()` (e.g. with `cmdAdd()` and `cmdConfig()`) actually correct?**
   _`Main()` has 12 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `belater`, `Fixed`, `Fixed` to the rest of the system?**
-  _42 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _43 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Main` be split into smaller, more focused modules?**
-  _Cohesion score 0.12195121951219512 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.112375533428165 - nodes in this community are weakly interconnected._

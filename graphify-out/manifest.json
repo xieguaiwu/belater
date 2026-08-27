@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "internal/cli/cli.go": {
-    "mtime": 1787630956.8299284,
-    "ast_hash": "49055406399b5615a30b47372228278e",
+    "mtime": 1787822722.6869538,
+    "ast_hash": "ce18be7cf5cbb2e03ff31e88da6e4d3a",
     "semantic_hash": ""
   },
   "internal/cli/cli_test.go": {
@@ -25,8 +25,8 @@
     "semantic_hash": ""
   },
   "internal/cli/cmd_daemon.go": {
-    "mtime": 1787629999.0184026,
-    "ast_hash": "471f0e296bdcc5cc8ca4ca34b2d39820",
+    "mtime": 1787822693.3547006,
+    "ast_hash": "98fa10d139b9116d04648ec76f009e88",
     "semantic_hash": ""
   },
   "internal/cli/cmd_manage.go": {
@@ -90,8 +90,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1787630892.907703,
-    "ast_hash": "a743ce63d89b478e43bf31dbfd8e09d9",
+    "mtime": 1787822722.6869538,
+    "ast_hash": "3b954e7536065d23da8c7661bf92a559",
     "semantic_hash": ""
   },
   "docs/plans/2026-08-24-belater.md": {
@@ -100,8 +100,8 @@
     "semantic_hash": ""
   },
   "CONTEXT_FOR_NEXT_AGENT.md": {
-    "mtime": 1787630969.682267,
-    "ast_hash": "1f855c96088320b132b99f2e0c22751a",
+    "mtime": 1787822734.654057,
+    "ast_hash": "c32ce01e203fcede6260b7779ece6121",
     "semantic_hash": ""
   },
   "internal/cli/cmd_results.go": {
@@ -115,13 +115,18 @@
     "semantic_hash": ""
   },
   "README_en.md": {
-    "mtime": 1787630892.907703,
-    "ast_hash": "bbe20597a919736b098e11683860330d",
+    "mtime": 1787822726.5149868,
+    "ast_hash": "ba7ea7accdd368b22238ca8a5160815d",
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1787630956.859373,
-    "ast_hash": "fbbd6a76ccc57b74927dce00494e2632",
+    "mtime": 1787822719.2639241,
+    "ast_hash": "b2b489e76dc5df0c5170525f0aefffd7",
+    "semantic_hash": ""
+  },
+  "internal/cli/cmd_daemon_test.go": {
+    "mtime": 1787822696.996732,
+    "ast_hash": "54fa3eb36811c17d8363d669cacc8192",
     "semantic_hash": ""
   }
 }
