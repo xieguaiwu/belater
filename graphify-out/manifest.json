@@ -5,18 +5,18 @@
     "semantic_hash": ""
   },
   "internal/cli/cli.go": {
-    "mtime": 1787993569.8626459,
-    "ast_hash": "88c1d5faf4253e3bcde97959512f9530",
+    "mtime": 1788029577.3000765,
+    "ast_hash": "2b351a98e1e0702007b6d27f63be0505",
     "semantic_hash": ""
   },
   "internal/cli/cli_test.go": {
-    "mtime": 1787557047.3814304,
-    "ast_hash": "9ce7eee48357f442e5e7e519e60f8745",
+    "mtime": 1788029615.3683465,
+    "ast_hash": "a8dcfaaca5f28509797a3097911dc857",
     "semantic_hash": ""
   },
   "internal/cli/cmd_add.go": {
-    "mtime": 1787630863.920398,
-    "ast_hash": "e76276d263d3e32e9ad90e24de92d027",
+    "mtime": 1788029544.2708423,
+    "ast_hash": "7718a7308fc77707e7a0df8c059d1bcc",
     "semantic_hash": ""
   },
   "internal/cli/cmd_config.go": {
@@ -90,18 +90,18 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1787993569.8616457,
-    "ast_hash": "70e7c62ef318cae83ca710b5b76f1fa8",
+    "mtime": 1788029640.2115223,
+    "ast_hash": "142d36d6d2479fe9b357770abb6cb6a4",
     "semantic_hash": ""
   },
   "docs/plans/2026-08-24-belater.md": {
-    "mtime": 1787993466.3976576,
-    "ast_hash": "7824a41bac0c62d6f1a42553f362a3bb",
+    "mtime": 1788029678.375793,
+    "ast_hash": "4078036164faf931879194d4bebedf64",
     "semantic_hash": ""
   },
   "CONTEXT_FOR_NEXT_AGENT.md": {
-    "mtime": 1787990943.802931,
-    "ast_hash": "e374a505ef8a1ae83163f9b1ead24ac7",
+    "mtime": 1787993698.5838752,
+    "ast_hash": "472a3437a18519455398fc090f289552",
     "semantic_hash": ""
   },
   "internal/cli/cmd_results.go": {
@@ -115,13 +115,13 @@
     "semantic_hash": ""
   },
   "README_en.md": {
-    "mtime": 1787991849.1228414,
-    "ast_hash": "4409ce0aaf34c2b172a3f510dd09d427",
+    "mtime": 1788029662.7976825,
+    "ast_hash": "ece3fa841f3dad11a5608888f362da3d",
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1787991856.843918,
-    "ast_hash": "58da2598e633c46b5d540007fc46638c",
+    "mtime": 1788029662.7976825,
+    "ast_hash": "9a1b37c88a2d817727f6c8aaeac7cb28",
     "semantic_hash": ""
   },
   "internal/cli/cmd_daemon_test.go": {
