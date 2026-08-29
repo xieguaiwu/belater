@@ -4,14 +4,14 @@
 
 把大型任务（如 pi-agent 多 agent 工作）排队到 DeepSeek **空闲时段**自动执行，避开高峰计费。空闲时段价格 = 高峰的 50%。
 
-## 计费规则（2026-08-17 生效，2026-08-23 更新周末）
+## 计费规则（2026-08-17 生效，2026-08-23 更新周末；2026-08-29 对照官方定价页复核一致）
 
 | 时段 | 北京时间 | 价格倍率 |
 |:---|:---|:---:|
 | 高峰 | 周一至周五 09:00-12:00、14:00-18:00 | 1.0x |
 | 空闲 | 其余全部时间（含周末全天） | 0.5x |
 
-规则由 `internal/schedule` 计算，可按 DeepSeek 官方公告调整。
+规则由 `internal/schedule` 计算，可按 DeepSeek 官方公告调整（https://api-docs.deepseek.com/zh-cn/quick_start/pricing）。
 
 ## 安装
 
@@ -132,13 +132,32 @@ belater daemon   # Ctrl+C 优雅退出，运行中任务完成后再退出
 
 ## 状态与日志
 
+```bash
+belater status
+```
+
+```text
+当前时段: 空闲 (0.5x 价格) · 周末全天空闲
+下次切换: 周一 09:00 高峰 (1d 16h 55m 后)
+现在就是空闲时段 — 新任务将在下次调度检查（约 15s 内）执行
+调度器: 运行中 (v0.2.4 · tick 15s · 心跳 1s 前) — 到期任务会自动执行
+队列: 0 待执行 · 0 运行中 · 2 已完成
+```
+
+切换时刻超过一天时带上日期（`明天 09:00`、`周一 09:00`）。「调度器」一行读心跳文件：锁持有但心跳过期、调度器版本低于本命令、或有任务到期未执行时，各出一行警告并给出恢复命令。`belater status --json` 供脚本使用（含 `scheduler_running`、`scheduler_stalled`、`overdue_queued`、`next_switch_label`）。
+
 - 状态目录：`~/.config/belater/`（`BELATER_STATE_DIR` 可覆盖）
-  - `queue.json` — 任务队列（原子写入 + flock 防并发损坏）
+  - `queue.json` — 任务队列（原子写入 + flock 串行化写；读不加锁）
   - `logs/<id>.log` — 每个任务的输出日志（带时间戳前缀）
   - `daemon.lock` — 单实例锁
+  - `daemon.heartbeat` — 调度器每个 tick 写入的存活证据（pid / 版本 / tick / 上次检查时刻）
 - **PATH 处理**：daemon 环境（systemd/cron）缺少交互 shell 的用户 bin 目录（`~/.npm-global/bin`、`~/.local/bin`、`~/go/bin`）时，任务执行会自动补全 PATH——`pi` 等安装在用户目录的工具无需额外配置；任务显式设置 `--env PATH=...` 时以任务为准
+- 队列读写：写路径持 `queue.lock` 并以 tmp+rename 发布，读路径不加锁，所以 `status` / `list` 不会排在调度器后面
+- 到期未执行：`belater list` 把过了计划时刻的任务显示为「已到期 Xm」
 - 崩溃恢复：daemon 重启时把遗留 `running` 任务复位为 `queued`；任务 last pid 仍存活时标记 `failed`（不重复执行）
 - 自动清理：完成 7 天以上的终态任务自动删除
+
+升级二进制后记得重启调度器：服务不会自动换新版，`systemctl --user restart belater`（`belater status` 会告警提示版本落后）。
 
 ## 设计
 
@@ -147,7 +166,7 @@ main.go → internal/cli   子命令分发
         → internal/schedule  峰谷窗口计算（周末规则）
         → internal/queue     任务模型 + JSON 持久化
         → internal/runner    执行 + 日志 + 超时杀进程组
-        → internal/daemon    调度循环 + 重试 + 每日重复 + GC
+        → internal/daemon    调度循环 + 重试 + 每日重复 + GC + 心跳
 ```
 
 纯 Go 标准库实现，无第三方依赖。实施计划见 `docs/plans/2026-08-24-belater.md`。
@@ -159,3 +178,9 @@ go vet ./...
 go test ./...
 go build -o belater .
 ```
+
+改动调度相关显示时保持这三条契约：
+
+1. 峰谷规则只依官方定价页，改规则 = 同时改 `internal/schedule`、README 两处与 `docs/plans` 约束段。
+2. 「运行中」以持有 `daemon.lock` 为准，但「无告警」还要求心跳新鲜且版本与本命令一致；不得只凭锁在就宣称调度器健康。
+3. 队列读路径不得拿 `queue.lock`：写方靠 tmp+rename 发布，读方加锁只会把读命令排到调度器后面。

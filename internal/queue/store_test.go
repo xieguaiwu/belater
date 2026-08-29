@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -221,5 +222,67 @@ func TestClaimForRun(t *testing.T) {
 	}
 	if _, err := s.ClaimForRun(running.ID); err == nil {
 		t.Error("claiming a running task must fail")
+	}
+}
+
+// TestLoadDoesNotWaitForTheWriteLock keeps reads off the write lock. The flock
+// is per open file description, so this second handle is a real contender —
+// exactly what the scheduler holds for each mutation. Blocking here is what
+// turned `belater status` into a multi-second wait.
+func TestLoadDoesNotWaitForTheWriteLock(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.Add(sampleTask()); err != nil {
+		t.Fatal(err)
+	}
+	lf, err := os.OpenFile(filepath.Join(s.Dir, lockFile), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lf.Close()
+	if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { syscall.Flock(int(lf.Fd()), syscall.LOCK_UN) })
+
+	type result struct {
+		tasks []*Task
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() {
+		tasks, err := s.Load()
+		done <- result{tasks, err}
+	}()
+
+	select {
+	case r := <-done:
+		if r.err != nil {
+			t.Fatalf("Load with the write lock held: %v", r.err)
+		}
+		if len(r.tasks) != 1 {
+			t.Fatalf("expected 1 task, got %d", len(r.tasks))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Load waited for the write lock — status/list stall behind the scheduler")
+	}
+}
+
+// TestLoadSeesCommittedWrites guards the claim that lock-free reads are safe:
+// writers publish by rename, so a completed write is always visible.
+func TestLoadSeesCommittedWrites(t *testing.T) {
+	s := newTestStore(t)
+	for i := 0; i < 20; i++ {
+		tk := sampleTask()
+		tk.ID = NewID()
+		if err := s.Add(tk); err != nil {
+			t.Fatal(err)
+		}
+		tasks, err := s.Load()
+		if err != nil {
+			t.Fatalf("Load after Add %d: %v", i, err)
+		}
+		if len(tasks) != i+1 {
+			t.Fatalf("after %d adds Load returned %d tasks", i+1, len(tasks))
+		}
 	}
 }

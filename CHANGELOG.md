@@ -2,6 +2,51 @@
 
 All notable changes to belater are documented here.
 
+## [0.2.4] - 2026-08-29
+
+### Fixed
+
+- **The next window switch had no date**: `belater status` printed
+  `下次切换: 09:00 高峰` even when that switch was 41 hours away (Saturday →
+  Monday). Labels now name the day: `12:00` for today, `明天 09:00`, `周一 09:00`.
+  Day counting is rounded, so a 23/25-hour DST day still counts as one day.
+- **"New tasks run immediately" was not true**: the scheduler polls once per
+  tick, so the off-peak hint promised instant execution. It now states the
+  running scheduler's actual tick interval (e.g. 约 15s 内).
+- **Scheduler liveness was lock-only**: holding `daemon.lock` was the whole
+  test, so a wedged dispatch loop — or a daemon started before the binary was
+  upgraded — still reported `调度器: 运行中 — 到期任务会自动执行`. The scheduler
+  now writes a heartbeat each pass (`daemon.heartbeat`: pid, version, tick,
+  last tick), and `status` reports heartbeat age plus three new warnings: a
+  stalled loop, a scheduler older than the running command, and queued tasks
+  whose run time has passed. Each names the recovery command
+  (`systemctl --user restart belater`).
+- **Reads waited behind the write lock**: `Store.Load` took a blocking
+  `flock(LOCK_EX)`, so `status` / `list` / `results` / `log` could stall for as
+  long as a scheduler mutation was in flight. Writers publish atomically
+  (temp file + rename), so reads never needed the lock. Writes are unchanged.
+- **A busy scheduler looked wedged**: the wait after dispatching (`--once`, and
+  the graceful-shutdown wait) held the instance lock but stopped writing
+  heartbeats, so any task running longer than the grace window made a
+  concurrent `belater status` claim the loop had stopped. The wait now pulses
+  on its own tick.
+- **No more guessed tick**: without heartbeat data `status` no longer claims
+  tasks run "约 15s 内" — the real interval of the running scheduler is unknown
+  in that case, and an older `--tick 60s` daemon would have made it false.
+
+### Added
+
+- `belater status --json` reports `scheduler_running`, `scheduler_stalled`,
+  `scheduler_has_heartbeat`, `scheduler_version`, `scheduler_version_behind`,
+  `scheduler_heartbeat_age_s`, `scheduler_tick_s`, `overdue_queued`,
+  `overdue_max_s`, `next_switch_label`, `next_switch_kind`, and queue counts.
+  Scheduler keys are always present (empty or `0` when unknown) so a consumer
+  never has to tell "unknown" apart from "unsupported".
+- `belater list` shows an overdue task as `已到期 Xm`; the old output printed
+  the same figure as a positive "time remaining".
+- Weekend status says `空闲 · 周末全天空闲`, so an all-day off-peak window is
+  not mistaken for a display that missed a switch.
+
 ## [0.2.3] - 2026-08-27
 
 ### Fixed

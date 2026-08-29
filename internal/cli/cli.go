@@ -4,6 +4,7 @@ package cli
 import (
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +15,7 @@ import (
 )
 
 // Version is the tool version.
-const Version = "0.2.3"
+const Version = "0.2.4"
 
 // Main dispatches subcommands and returns the process exit code.
 func Main(args []string) int {
@@ -155,6 +156,53 @@ func fmtDuration(d time.Duration) string {
 // fmtRunAt renders a scheduled time in local time.
 func fmtRunAt(t time.Time) string {
 	return t.Local().Format("2006-01-02 15:04")
+}
+
+// weekdayCN names the weekdays for status output.
+var weekdayCN = [...]string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
+
+// calendarDayDiff counts whole calendar days from a to b, both already in
+// their display zone. Rounding absorbs the ±1 hour a DST shift puts between two
+// midnights; Asia/Shanghai has no DST, other zones must not break either.
+func calendarDayDiff(a, b time.Time) int {
+	da := time.Date(a.Year(), a.Month(), a.Day(), 0, 0, 0, 0, a.Location())
+	db := time.Date(b.Year(), b.Month(), b.Day(), 0, 0, 0, 0, b.Location())
+	return int(math.Round(db.Sub(da).Hours() / 24))
+}
+
+// fmtSwitchTime renders a future window switch as a clock time, tagged with the
+// day when it is not "today" in the billing zone. A bare "09:00" read on
+// Saturday afternoon looks like tomorrow morning; the switch was Monday's.
+func fmtSwitchTime(now, t time.Time, loc *time.Location) string {
+	lt := t.In(loc)
+	clock := lt.Format("15:04")
+	switch days := calendarDayDiff(now.In(loc), lt); {
+	case days <= 0:
+		return clock
+	case days == 1:
+		return "明天 " + clock
+	default:
+		return weekdayCN[int(lt.Weekday())] + " " + clock
+	}
+}
+
+// fmtAge renders how long ago something happened; sub-second reads "刚刚".
+func fmtAge(now, then time.Time) string {
+	d := age(now, then)
+	if d < time.Second {
+		return "刚刚"
+	}
+	return fmtDuration(d) + " 前"
+}
+
+// fmtRemaining renders time left until a scheduled run. A run whose time has
+// already passed must not print as if it still had that much time left.
+func fmtRemaining(until time.Time) string {
+	d := time.Until(until)
+	if d < 0 {
+		return "已到期 " + fmtDuration(-d)
+	}
+	return fmtDuration(d)
 }
 
 // fmtName shortens a task name for tables.

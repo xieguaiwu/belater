@@ -1,6 +1,6 @@
 # belater — Defer big tasks to DeepSeek off-peak billing hours
 
-Queue large jobs (like pi-agent multi-agent work) and run them automatically when DeepSeek billing is off-peak — **half price**. Peak hours: Mon–Fri 09:00–12:00 and 14:00–18:00 (Beijing time); weekends are off-peak all day.
+Queue large jobs (like pi-agent multi-agent work) and run them automatically when DeepSeek billing is off-peak — **half price**. Peak hours: Mon–Fri 09:00–12:00 and 14:00–18:00 (Beijing time); everything else, weekends included, is off-peak. Rules re-checked against the official pricing page on 2026-08-29.
 
 ## Install
 
@@ -32,7 +32,7 @@ belater log <id>          # per-task log with metadata header
 
 | Command | Description |
 |:---|:---|
-| `belater status` | Current window, next switch, **scheduler liveness**, queue summary |
+| `belater status` | Current window, next switch (tagged with the day when it is not today), **scheduler liveness from its heartbeat**, overdue tasks, queue summary |
 | `belater add <cmd...>` | Enqueue (default: next off-peak start) |
 | `belater list` | Show queue (`--all`, `--json`) |
 | `belater results` | Finished tasks: status/exit code/duration (`--days N`, `--json`) |
@@ -84,10 +84,21 @@ belater daemon --uninstall
 
 ## State & logs
 
-- `~/.config/belater/` (`BELATER_STATE_DIR` overrides): `queue.json` (atomic + flock), `logs/<id>.log`, `daemon.lock`
+```
+当前时段: 空闲 (0.5x 价格) · 周末全天空闲
+下次切换: 周一 09:00 高峰 (1d 16h 55m 后)
+现在就是空闲时段 — 新任务将在下次调度检查（约 15s 内）执行
+调度器: 运行中 (v0.2.4 · tick 15s · 心跳 1s 前) — 到期任务会自动执行
+队列: 0 待执行 · 0 运行中 · 2 已完成
+```
+
+`belater status` output is Chinese by design (CLI strings are not localized). Line 2 names the day when the next switch is not today — `明天 09:00` tomorrow, `周一 09:00` Monday — instead of a bare clock time 41 hours out. Line 4 is read from the scheduler heartbeat: warnings are added when the loop stopped ticking, when the running scheduler is an older build than the command, or when a queued task has passed its run time. `--json` exposes the same (`scheduler_running`, `scheduler_stalled`, `overdue_queued`, `next_switch_label`).
+
+- `~/.config/belater/` (`BELATER_STATE_DIR` overrides): `queue.json` (atomic write + flock; **reads take no lock**), `logs/<id>.log`, `daemon.lock` (single instance), `daemon.heartbeat` (pid / version / tick / last pass)
 - **PATH handling**: when the daemon environment (systemd/cron) lacks per-user bin dirs (`~/.npm-global/bin`, `~/.local/bin`, `~/go/bin`), task execution auto-appends them to PATH — tools like `pi` installed in user dirs work out of the box; an explicit `--env PATH=...` wins
 - Crash recovery: interrupted `running` tasks reset to `queued`; tasks whose last pid is still alive are marked `failed` (no double execution)
 - GC: terminal tasks older than 7 days are removed automatically
+- **After upgrading the binary, restart the scheduler** (`systemctl --user restart belater`). A running service keeps executing the build it was started from; `belater status` warns when the two differ.
 
 ## Design
 
@@ -96,10 +107,24 @@ main.go → internal/cli       subcommands
         → internal/schedule  peak/off-peak windows (weekend rule)
         → internal/queue     task model + JSON persistence (flock, CAS claim)
         → internal/runner    exec + timestamped logs + timeout group-kill
-        → internal/daemon    scheduler loop + retry + daily repeat + GC
+        → internal/daemon    scheduler loop + retry + daily repeat + GC + heartbeat
 ```
 
 Pure Go standard library, zero third-party dependencies. Implementation plan: `docs/plans/2026-08-24-belater.md`.
+
+## Development
+
+```bash
+go vet ./...
+go test ./...
+go build -o belater .
+```
+
+Three contracts to keep when touching scheduling display:
+
+1. Billing rules come from the official pricing page only. Changing them means `internal/schedule`, both READMEs, and the constraint block in `docs/plans`.
+2. "Running" reads the instance lock, but a clean report also needs a fresh heartbeat and a version matching the command — lock presence alone must never be called healthy.
+3. Queue reads must not take `queue.lock`: writers publish with temp-file + rename, so a lock in the read path only queues CLI commands behind the scheduler.
 
 ## License
 

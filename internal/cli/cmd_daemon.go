@@ -93,6 +93,7 @@ func runOnce(st *queue.Store, tick time.Duration, maxParallel int) int {
 		Tick:        tick,
 		MaxParallel: maxParallel,
 		Once:        true,
+		Version:     Version,
 		LogWriter:   os.Stdout,
 	})
 	if err != nil {
@@ -119,6 +120,7 @@ func runForever(st *queue.Store, tick time.Duration, maxParallel int) int {
 		Schedule:    defaultSchedule(),
 		Tick:        tick,
 		MaxParallel: maxParallel,
+		Version:     Version,
 		LogWriter:   os.Stdout,
 	})
 	if err != nil {

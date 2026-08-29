@@ -53,7 +53,7 @@ func (s *Store) mutate(f func(tasks []*Task) ([]*Task, error)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.lock(func() error {
-		tasks, err := s.readLocked()
+		tasks, err := s.read()
 		if err != nil {
 			return err
 		}
@@ -65,8 +65,10 @@ func (s *Store) mutate(f func(tasks []*Task) ([]*Task, error)) error {
 	})
 }
 
-// readLocked loads tasks. Caller must hold s.mu and the flock.
-func (s *Store) readLocked() ([]*Task, error) {
+// read loads tasks from disk. No flock is required: writers publish through
+// writeLocked (write temp file, then rename), so a reader always opens a
+// complete file — the previous one or the new one, never a half-written mix.
+func (s *Store) read() ([]*Task, error) {
 	data, err := os.ReadFile(s.path())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -120,15 +122,15 @@ func (s *Store) writeLocked(tasks []*Task) error {
 }
 
 // Load reads all tasks. A missing queue file yields an empty slice.
+//
+// It does not take the flock on purpose. Blocking on LOCK_EX here made every
+// read wait for whatever the scheduler was doing mid-mutation, turning a 5 ms
+// command into a multi-second stall; reads stay correct without it because
+// writers publish atomically by rename (see read).
 func (s *Store) Load() ([]*Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var tasks []*Task
-	err := s.lock(func() error {
-		var err error
-		tasks, err = s.readLocked()
-		return err
-	})
+	tasks, err := s.read()
 	if err != nil {
 		return nil, fmt.Errorf("load queue: %w", err)
 	}

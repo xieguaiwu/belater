@@ -63,7 +63,7 @@ func cmdList(args []string) int {
 		remaining := "-"
 		switch t.Status {
 		case queue.Queued:
-			remaining = fmtDuration(time.Until(t.RunAt))
+			remaining = fmtRemaining(t.RunAt)
 		case queue.Running:
 			remaining = "运行中"
 		case queue.Paused:

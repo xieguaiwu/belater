@@ -105,7 +105,7 @@ func TestDispatchRunsDueTask(t *testing.T) {
 	logger := log.New(io.Discard, "", 0)
 	dispatchOnce(s, schedule.DefaultSchedule(), 1, &wg, logger)
 	// Wait up to 5s for completion.
-	waitRunning(&wg, 5*time.Second)
+	waitRunning(&wg, 5*time.Second, 0, nil)
 
 	got, err := s.Find("cc000003")
 	if err != nil {
@@ -140,7 +140,7 @@ func TestDispatchRetry(t *testing.T) {
 	var wg sync.WaitGroup
 	logger := log.New(io.Discard, "", 0)
 	dispatchOnce(s, schedule.DefaultSchedule(), 1, &wg, logger)
-	waitRunning(&wg, 5*time.Second)
+	waitRunning(&wg, 5*time.Second, 0, nil)
 
 	got, err := s.Find("ee000005")
 	if err != nil {

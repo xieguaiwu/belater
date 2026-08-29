@@ -27,6 +27,7 @@ type Config struct {
 	MaxParallel int           // concurrent non-parallel tasks
 	Once        bool          // one dispatch pass, then wait and exit
 	LogWriter   io.Writer     // daemon log destination
+	Version     string        // build version, recorded in the heartbeat
 }
 
 // Run starts the scheduler loop until ctx is cancelled.
@@ -60,9 +61,35 @@ func Run(ctx context.Context, cfg Config) error {
 		sch = schedule.DefaultSchedule()
 	}
 
+	// Liveness pulse for `belater status`: once at startup, then after every
+	// dispatch pass. A failure here must never stop the scheduler, so it is
+	// logged once and swallowed.
+	hb := Heartbeat{
+		PID:         os.Getpid(),
+		Version:     cfg.Version,
+		TickSec:     ceilSeconds(cfg.Tick),
+		MaxParallel: cfg.MaxParallel,
+		Once:        cfg.Once,
+		StartedAt:   time.Now(),
+	}
+	var hbFailed bool
+	var hbMu sync.Mutex
+	pulse := func() {
+		hbMu.Lock()
+		hb.LastTickAt = time.Now()
+		snapshot := hb
+		hbMu.Unlock()
+		if err := WriteHeartbeat(cfg.Store.Dir, snapshot); err != nil && !hbFailed {
+			hbFailed = true
+			logger.Printf("heartbeat 写入失败（不影响执行，后续不再重复记录）: %v", err)
+		}
+	}
+	pulse()
+
 	var wg sync.WaitGroup
 	for {
 		dispatchOnce(cfg.Store, sch, cfg.MaxParallel, &wg, logger)
+		pulse()
 
 		if cfg.Once {
 			break
@@ -71,14 +98,16 @@ func Run(ctx context.Context, cfg Config) error {
 		select {
 		case <-ctx.Done():
 			logger.Printf("shutdown: waiting for %d running tasks (max 5m)", runningCount(cfg.Store))
-			waitRunning(&wg, 5*time.Minute)
+			waitRunning(&wg, 5*time.Minute, cfg.Tick, pulse)
 			return nil
 		case <-time.After(cfg.Tick):
 		}
 	}
 
 	// Once mode: wait for running tasks, bounded.
-	waitRunning(&wg, 10*time.Minute)
+	// The wait must keep pulsing: a task longer than the grace window is busy
+	// work, not a wedged loop, and `belater status` must not say otherwise.
+	waitRunning(&wg, 10*time.Minute, cfg.Tick, pulse)
 	return nil
 }
 
@@ -177,12 +206,34 @@ func runningCount(s *queue.Store) int {
 }
 
 // waitRunning waits for all Running tasks to finish, bounded by timeout.
-func waitRunning(wg *sync.WaitGroup, timeout time.Duration) {
+// onBeat, when given, runs every interval for the duration of the wait, so a
+// scheduler occupied by a long task keeps reporting itself as alive.
+func waitRunning(wg *sync.WaitGroup, timeout, interval time.Duration, onBeat func()) {
 	done := make(chan struct{})
 	go func() { wg.Wait(); close(done) }()
-	select {
-	case <-done:
-	case <-time.After(timeout):
+
+	if onBeat == nil || interval <= 0 {
+		select {
+		case <-done:
+		case <-time.After(timeout):
+		}
+		return
+	}
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	onBeat()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			onBeat()
+		case <-timer.C:
+			return
+		}
 	}
 }
 
