@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "internal/cli/cli.go": {
-    "mtime": 1787990548.9213269,
-    "ast_hash": "36a644a1089b1fb69f69d11ab05236f6",
+    "mtime": 1787993569.8626459,
+    "ast_hash": "88c1d5faf4253e3bcde97959512f9530",
     "semantic_hash": ""
   },
   "internal/cli/cli_test.go": {
@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "internal/schedule/window.go": {
-    "mtime": 1787554381.256941,
-    "ast_hash": "59c542c4636f34d3e5c5475e5c1b1e31",
+    "mtime": 1787993521.5491843,
+    "ast_hash": "d2808a41d5b3c259eb2a2e80118322fb",
     "semantic_hash": ""
   },
   "internal/schedule/window_test.go": {
@@ -90,13 +90,13 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1787991849.1228414,
-    "ast_hash": "ae94e5e4346c00d173f9e8a8be7109fa",
+    "mtime": 1787993569.8616457,
+    "ast_hash": "70e7c62ef318cae83ca710b5b76f1fa8",
     "semantic_hash": ""
   },
   "docs/plans/2026-08-24-belater.md": {
-    "mtime": 1787554367.4888067,
-    "ast_hash": "b23dac22649b9f99db62d81175a88f6f",
+    "mtime": 1787993466.3976576,
+    "ast_hash": "7824a41bac0c62d6f1a42553f362a3bb",
     "semantic_hash": ""
   },
   "CONTEXT_FOR_NEXT_AGENT.md": {
