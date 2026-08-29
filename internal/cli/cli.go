@@ -15,7 +15,7 @@ import (
 )
 
 // Version is the tool version.
-const Version = "0.2.4"
+const Version = "0.3.0"
 
 // Main dispatches subcommands and returns the process exit code.
 func Main(args []string) int {
@@ -83,6 +83,7 @@ func printHelp(w *os.File) {
 
 常用示例:
   belater add --pi "重构 auth 模块并补充测试"
+  belater add --at "2026-09-01 02:00" ./month_report.sh   # 指定确切时刻
   belater add --delay 2h ./long_task.sh
   belater add --every 02:00 --max-runs 7 --pi "生成今日代码审查报告"
   belater add --notify --pi "跑完整测试矩阵"   # 完成后桌面通知

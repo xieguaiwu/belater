@@ -2,6 +2,22 @@
 
 All notable changes to belater are documented here.
 
+## [0.3.0] - 2026-08-30
+
+### Added
+
+- **Start work automatically at an exact date and time**: `--at` now accepts
+  `YYYY-MM-DD HH:MM` in addition to the old `HH:MM`. A `T` separator works
+  too (`2026-09-01T02:00`), and a bare date (`2026-09-01`) means 00:00 that
+  day. Times are interpreted in the billing timezone (Asia/Shanghai), like
+  every other belater time.
+  - A bare `HH:MM` keeps the old rule: today, or tomorrow when already past.
+  - An absolute time that has already passed is rejected with a clear error
+    instead of silently moving — a pinned moment must stay pinned.
+  - No scheduler change was needed: dispatch already fires on `RunAt <= now`,
+    so a dated task simply waits until its moment. Combine with `--every` for
+    a first run at the exact moment, then daily.
+
 ## [0.2.4] - 2026-08-29
 
 ### Fixed

@@ -34,7 +34,7 @@ func cmdAdd(args []string) int {
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	piPrompt := fs.String("pi", "", "pi-agent 模式：把提示词交给 pi -p 执行")
 	piArgs := fs.String("pi-args", "", "附加到 pi 命令的参数（如 --no-session）")
-	at := fs.String("at", "", "指定执行时间 HH:MM（今天或明天）")
+	at := fs.String("at", "", "指定执行时间：HH:MM（已过则明天）或 \"YYYY-MM-DD HH:MM\"（精确时刻）")
 	delay := fs.String("delay", "", "从现在起延迟执行（如 2h、90m）")
 	nowFlag := fs.Bool("now", false, "立即执行（等下一个调度 tick）")
 	every := fs.String("every", "", "每日重复执行 HH:MM")
@@ -92,10 +92,11 @@ func cmdAdd(args []string) int {
 	schedLoc := sch.Location
 	switch {
 	case *at != "":
-		runAt = parseHHMM(*at, now, schedLoc)
-		if runAt.IsZero() {
-			return usageError(fs, "--at 格式应为 HH:MM")
+		t, err := parseAtTime(*at, now, schedLoc)
+		if err != nil {
+			return usageError(fs, "--at %v", err)
 		}
+		runAt = t
 	case *delay != "":
 		d, err := time.ParseDuration(*delay)
 		if err != nil {
@@ -219,6 +220,33 @@ func cmdAdd(args []string) int {
 		}
 	}
 	return 0
+}
+
+// parseAtTime parses an --at value in loc. Two forms are accepted:
+//   - "HH:MM" — today, or tomorrow when that clock time has already passed
+//     (the historical behaviour, kept for daily-style shorthand);
+//   - "YYYY-MM-DD HH:MM" (also with a T separator, or a bare date for
+//     midnight) — an exact moment.
+//
+// An explicit date that lies in the past is rejected: a pinned moment must
+// not silently move the way a bare clock time does.
+func parseAtTime(s string, now time.Time, loc *time.Location) (time.Time, error) {
+	if !strings.Contains(s, "-") {
+		t := parseHHMM(s, now, loc)
+		if t.IsZero() {
+			return time.Time{}, fmt.Errorf("格式应为 HH:MM 或 \"YYYY-MM-DD HH:MM\"")
+		}
+		return t, nil
+	}
+	for _, layout := range []string{"2006-01-02 15:04", "2006-01-02T15:04", "2006-01-02"} {
+		if t, err := time.ParseInLocation(layout, s, loc); err == nil {
+			if !t.After(now) {
+				return time.Time{}, fmt.Errorf("指定的时间已过: %s", t.Format("2006-01-02 15:04"))
+			}
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("格式应为 HH:MM 或 \"YYYY-MM-DD HH:MM\"")
 }
 
 // parseHHMM parses "HH:MM" in loc as today or tomorrow (if already past).

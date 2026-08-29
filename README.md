@@ -59,6 +59,7 @@ belater list
 | `--pi "提示词"` | pi-agent 模式：构造 `pi -p '提示词'` 执行 |
 | `--pi-args "..."` | 附加 pi 参数（按 shell 片段原样拼入，如 `--no-session`、`--model ...`） |
 | `--at HH:MM` | 指定时间（已过则明天；可落在高峰，用户显式指定） |
+| `--at "YYYY-MM-DD HH:MM"` | 指定确切日期时刻（也接受 `T` 分隔；只写日期 = 当天 00:00）；已过则报错，不静默顺延。时间按北京时间解释 |
 | `--delay 2h` | 从现在起延迟执行 |
 | `--now` | 立即排队（等下一个 tick） |
 | `--every HH:MM` | 每日重复（`--max-runs N` 限次数） |
@@ -81,6 +82,9 @@ belater add --every 02:00 --max-runs 7 --pi "生成今日代码审查报告"
 
 # 延迟 2 小时后执行本地脚本
 belater add --delay 2h ./long_task.sh
+
+# 指定确切时刻自动开始（如 9 月 1 日凌晨 2 点）
+belater add --at "2026-09-01 02:00" ./month_report.sh
 
 # 周末全天都是空闲 — 周五晚上入队即可
 belater add --pi "跑完整测试矩阵并修复发现的问题"

@@ -17,6 +17,9 @@ install -m 0755 belater ~/.local/bin/belater
 # Queue a pi-agent task for the next off-peak window (today 18:00 or weekend)
 belater add --pi "Refactor the auth module and add tests"
 
+# Start a task at an exact date and time
+belater add --at "2026-09-01 02:00" ./month_report.sh
+
 # Run the scheduler (foreground, or install as a service)
 belater daemon            # foreground
 belater daemon --install  # systemd user service (auto-start)
@@ -49,6 +52,7 @@ belater log <id>          # per-task log with metadata header
 | `--pi "prompt"` | pi-agent mode: builds `pi -p 'prompt'` |
 | `--pi-args "..."` | Extra pi args, spliced verbatim into the shell command (e.g. `--no-session`, `--model ...`) |
 | `--at HH:MM` | Wall-clock time (tomorrow if past; may land in peak — explicit) |
+| `--at "YYYY-MM-DD HH:MM"` | Exact date and time (`T` separator also works; a bare date means 00:00). A past moment is rejected, never moved. Times are Beijing time |
 | `--delay 2h` | Run after a delay |
 | `--now` | Queue for the next tick |
 | `--every HH:MM` | Repeat daily (`--max-runs N` to bound) |

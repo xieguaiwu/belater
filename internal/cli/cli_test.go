@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -46,6 +47,53 @@ func TestParseHHMM(t *testing.T) {
 	}
 	if !parseHHMM("ab", now, loc).IsZero() {
 		t.Error("invalid format must be zero")
+	}
+}
+
+func TestParseAtTime(t *testing.T) {
+	loc := time.FixedZone("T", 8*3600)
+	now := time.Date(2026, 8, 24, 14, 0, 0, 0, loc) // Monday 14:00
+
+	// Valid inputs: bare HH:MM keeps the today-or-tomorrow rule; dated forms
+	// are exact moments; all are interpreted in loc, not the machine zone.
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"16:30", "2026-08-24 16:30"},            // today, unchanged behaviour
+		{"09:00", "2026-08-25 09:00"},            // passed today -> tomorrow
+		{"2026-09-01 09:00", "2026-09-01 09:00"}, // exact future moment
+		{"2026-09-01T09:00", "2026-09-01 09:00"}, // T separator
+		{"2026-09-01", "2026-09-01 00:00"},       // bare date = midnight
+		{"2026-12-31 23:59", "2026-12-31 23:59"}, // far future
+		{"2026-08-24 14:01", "2026-08-24 14:01"}, // one minute ahead is valid
+	}
+	for _, c := range cases {
+		got, err := parseAtTime(c.in, now, loc)
+		if err != nil {
+			t.Errorf("parseAtTime(%q) error: %v", c.in, err)
+			continue
+		}
+		want, _ := time.ParseInLocation("2006-01-02 15:04", c.want, loc)
+		if !got.Equal(want) {
+			t.Errorf("parseAtTime(%q) = %v, want %v", c.in, got, want)
+		}
+	}
+
+	// An explicit date in the past must be rejected, not silently moved.
+	for _, in := range []string{"2026-08-01 09:00", "2026-08-24 14:00", "2026-08-24", "2025-01-01 00:00"} {
+		if _, err := parseAtTime(in, now, loc); err == nil {
+			t.Errorf("parseAtTime(%q) must fail: time already passed", in)
+		} else if !strings.Contains(err.Error(), "已过") {
+			t.Errorf("parseAtTime(%q) error should say the time passed, got: %v", in, err)
+		}
+	}
+
+	// Invalid inputs: format errors, no false acceptance.
+	for _, in := range []string{"2026-02-30 09:00", "ab-cd", "2026-13-01 09:00", "09-01 09:00", "25:00", ""} {
+		if _, err := parseAtTime(in, now, loc); err == nil {
+			t.Errorf("parseAtTime(%q) must fail on bad input", in)
+		}
 	}
 }
 
