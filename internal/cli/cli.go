@@ -67,7 +67,7 @@ func printHelp(w *os.File) {
 空闲时段价格 = 高峰的 50%%。高峰：周一至周五 09:00-12:00、14:00-18:00（北京时间）；周末全天空闲。
 
 用法:
-  belater status              查看当前计费窗口与队列概况
+  belater status              查看当前计费窗口、调度器状态与队列概况
   belater add <命令...>       入队任务（默认下次空闲时段执行）
   belater list                查看队列
   belater results              查看已完成任务的结果汇总

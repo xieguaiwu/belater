@@ -1,9 +1,14 @@
 // Package schedule computes DeepSeek peak/off-peak billing windows.
 //
-// Billing rules (effective 2026-08-17, weekend rule updated 2026-08-23):
+// Billing rules (effective 2026-08-17, weekend rule updated 2026-08-23,
+// re-verified against the official pricing page on 2026-08-29):
 //   - Weekdays (Mon-Fri): peak 09:00-12:00 and 14:00-18:00 Beijing time.
 //   - Weekends (Sat-Sun): all day off-peak.
 //   - Off-peak price is 50% of peak price.
+//
+// Source of truth: https://api-docs.deepseek.com/zh-cn/quick_start/pricing
+// Changing these windows means updating both READMEs and the constraint block
+// in docs/plans (see the 修订记录 section).
 package schedule
 
 import (
