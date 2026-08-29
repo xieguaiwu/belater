@@ -32,6 +32,9 @@ belater v0.2.4 — DeepSeek 峰谷计费延迟执行器（Go 1.25 纯标准库�
 - 大任务：7f1d18c8 rebirth 检查修复 exit 0（36m）✓
 - **v0.2.4 端到端**（08-29 16:05，真服务）：restart 后 status 显示 `v0.2.4 · tick 15s · 心跳 1s 前` 无告警；`add --now echo` 在同一 tick 内派发（16:05:37 done exit 0）并验证 `last_tick_at` 前进；临时状态目录造旧版+旧心跳+过期任务，三行告警同时命中 ✓
 - **读不加锁回归**：daemon 持 `queue.lock` 时 `Load` 立即返回（旧代码会等到释放）✓
+- 测试规模：67 个 top-level test（含子测试 102 个），`go test -race -count=1` 全绿（2026-08-29）
+- 文档基线：五个文档（README.md / README_en.md / CHANGELOG.md / 本文件 / docs/plans 计划与修订记录）版本均记 0.2.4；graphify 基线 = 最后一个**改代码**的 commit（`graphify-out/` 自身的提交 commit 不改代码，故 `Built from commit` 会比 HEAD 早一个）
+- ⚠️ README 命名惯例与 `development-quality-gates.md` 关卡 8（README.md 英 + README_zh.md 中）**相反**：本项目历史采用 README.md 中文主文 + README_en.md，维持现状不翻搅
 
 ## 遗留问题 / 待办
 
