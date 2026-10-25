@@ -169,3 +169,98 @@ func TestCollectResultsEmpty(t *testing.T) {
 		t.Errorf("expected empty, got %d", len(rows))
 	}
 }
+
+func TestEllipsis(t *testing.T) {
+	cases := []struct {
+		in   string
+		max  int
+		want string
+	}{
+		{"short", 40, "short"},
+		{"exactly10!", 10, "exactly10!"},
+		{"this is a long prompt", 10, "this is a…"},
+		// Rune-counted, not byte-counted: a CJK prompt must not be cut
+		// mid-character, and 10 runes is 10 characters not 30 bytes.
+		{"重构认证模块并补充完整测试", 10, "重构认证模块并补充…"},
+	}
+	for _, c := range cases {
+		if got := ellipsis(c.in, c.max); got != c.want {
+			t.Errorf("ellipsis(%q, %d) = %q, want %q", c.in, c.max, got, c.want)
+		}
+	}
+}
+
+func TestBoolSum(t *testing.T) {
+	cases := []struct {
+		in   []bool
+		want int
+	}{
+		{[]bool{false, false}, 0},
+		{[]bool{true, false}, 1},
+		{[]bool{true, true}, 2},
+	}
+	for _, c := range cases {
+		if got := boolSum(c.in...); got != c.want {
+			t.Errorf("boolSum(%v) = %d, want %d", c.in, got, c.want)
+		}
+	}
+}
+
+func TestAddCommand(t *testing.T) {
+	cases := []struct {
+		name       string
+		kind       string
+		prompt     string
+		extraArgs  string
+		positional []string
+		want       string
+	}{
+		{
+			name:   "pi mode quotes the prompt",
+			kind:   "pi",
+			prompt: "重构 auth",
+			want:   "pi -p '重构 auth'",
+		},
+		{
+			name:      "pi mode appends args verbatim",
+			kind:      "pi",
+			prompt:    "p",
+			extraArgs: "--no-session",
+			want:      "pi -p 'p' --no-session",
+		},
+		{
+			name:   "cmd mode pipes into the bridge",
+			kind:   "cmd",
+			prompt: "review this",
+			want:   "printf '%s' 'review this' | cmd-bridge",
+		},
+		{
+			name:      "cmd mode appends bridge args",
+			kind:      "cmd",
+			prompt:    "p",
+			extraArgs: "-m z-ai/glm-5.3-flash",
+			want:      "printf '%s' 'p' | cmd-bridge -m z-ai/glm-5.3-flash",
+		},
+		{
+			// The whole point of shQuote: a prompt with a quote, $VAR and
+			// backticks must reach the bridge as literal text, not expand.
+			name:   "cmd mode escapes shell metacharacters and quotes",
+			kind:   "cmd",
+			prompt: "it's $HOME `x`",
+			want:   `printf '%s' 'it'\''s $HOME ` + "`x`" + `' | cmd-bridge`,
+		},
+		{
+			name:       "positional command passes through",
+			kind:       "",
+			positional: []string{"echo", "hi"},
+			want:       "echo hi",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := addCommand(c.kind, c.prompt, c.extraArgs, c.positional); got != c.want {
+				t.Errorf("addCommand() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}

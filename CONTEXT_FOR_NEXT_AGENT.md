@@ -2,9 +2,21 @@
 
 ## 项目当前状态
 
-belater v0.3.0 — DeepSeek 峰谷计费延迟执行器（Go 1.25 纯标准库，零第三方依赖）。
+belater v0.4.0 — DeepSeek 峰谷计费延迟执行器（Go 1.25 纯标准库，零第三方依赖）。
 **公开仓库**: https://github.com/xieguaiwu/belater（PUBLIC, master, 8 topics, MIT, CI 全绿）。
 已部署 `~/.local/bin/belater`（v0.3.0，2026-08-30），systemd 用户服务已重启到新二进制（`status` 显示 `v0.3.0 · tick 15s · 心跳新鲜` 无告警）。
+
+## 最后一次完成的工作（2026-10-26）
+
+用户需求「把 command-code 里不提供 API key 的 Go $1 套餐也接进 pi-agent harness」→ 新增 **`--cmd` 模式**（v0.4.0）：
+
+- `belater add --cmd "提示词"` 构造 `printf '%s' '<提示词>' | cmd-bridge`，`--cmd-args "..."` 追加桥参数。
+- **为什么走 cmd-bridge 而不是直接调 `cmd`**：加固旗标集（`--yolo/--tools-all/-t/--skip-onboarding/--max-turns`）住在 `cmd-bridge` 里，pi 子代理车道与 belater 共用**一份定义**；复制到 Go 里必然漂移。
+- **`--cmd` 默认立即执行**（与 `--pi` 相反）：平价套餐无峰谷差价，排到空闲时段只增加延迟。`--at/--delay/--every` 原样可用；高峰计费警告对 `--cmd` 抑制。
+- 提示词经 `shQuote` 单引号包裹，引号/`$VAR`/反引号原样送达（有往返测试）。
+- 纯函数重构：`addCommand(kind, prompt, extraArgs, positional)`，使命令拼装可单测而不碰队列与磁盘；`--pi`/`--cmd`/位置参数三者互斥，全组合 exit 2。
+- 测试：新增 `TestAddCommand`（6 例，含元字符转义）、`TestEllipsis`（含 CJK 按 rune 截断）、`TestBoolSum`；`go test -race` 全绿，cli 包 34 个 RUN。
+- 版本 0.3.0 → 0.4.0；两 README、CHANGELOG、help 示例同步。
 
 **已实战验证**：2026-08-24/25 完成首个真实任务闭环——rebirth 漏洞检查任务（pi 36 分钟完成：复现挂起 → 定位根因 → v0.8.0 修复熔断器 → 测试 → 推送 → 部署），全链路排队→调度→执行→日志→结果可用。当天唯一失败（18:00 exit 127）为 PATH bug，已修复并验证。
 
@@ -28,14 +40,16 @@ belater v0.3.0 — DeepSeek 峰谷计费延迟执行器（Go 1.25 纯标准库�
 - 服务环境执行 pi：73595fb5 "路径修复成功" exit 0（9s）✓
 - 大任务：7f1d18c8 rebirth 检查修复 exit 0（36m）✓
 - **v0.2.4 端到端**（08-29 16:05，真服务）：三行告警（旧版/心跳过期/过期任务）同时命中 ✓；读不加锁回归 ✓
+- **v0.4.0 端到端**（10-26，临时状态目录 + 真 cmd）：`add --cmd` 入队显示「立即 执行 (0s 后)」✓；`belater run` → 子任务在 `/tmp/blw` 真写入文件、exit 0 ✓；`--pi`+`--cmd`、`--cmd`+位置参数、`--cmd-args` 单独用、三者皆无 → 全 exit 2 ✓；带单引号/`$HOME`/反引号的提示词经 sh 往返字节一致 ✓
 - **v0.3.0 端到端**（08-30，真服务 + 临时目录）：`--at "2026-09-01 09:00"` 入队显示 `高峰时段（用户指定） 执行 (2d 6h 5m 后)` ✓；裸日期 → 00:00 ✓；已过时刻/坏格式 exit 2 ✓；服务重启后 `status` 显示 v0.3.0 心跳新鲜无告警 ✓
 - 测试规模：68 个 top-level test（含子测试 103 个），`go test -race -count=1` 全绿（2026-08-30）
-- 文档基线：五个文档（README.md / README_en.md / CHANGELOG.md / 本文件 / docs/plans 计划与修订记录）版本均记 0.3.0；graphify 基线 = 最后一个**改代码**的 commit（`graphify-out/` 自身的提交 commit 不改代码，故 `Built from commit` 会比 HEAD 早一个）
+- 文档基线：五个文档（README.md / README_en.md / CHANGELOG.md / 本文件 / docs/plans 计划与修订记录）版本均记 0.4.0；graphify 基线 = 最后一个**改代码**的 commit（`graphify-out/` 自身的提交 commit 不改代码，故 `Built from commit` 会比 HEAD 早一个）
 - ⚠️ README 命名惯例与 `development-quality-gates.md` 关卡 8（README.md 英 + README_zh.md 中）**相反**：本项目历史采用 README.md 中文主文 + README_en.md，维持现状不翻搅
 
 ## 遗留问题 / 待办
 
-- [ ] 计费规则硬编码 `internal/schedule`（DefaultSchedule）——DeepSeek 改规则需改代码；config.json 外部化（候选，原记 v0.3.0 位，本版占用后顺延）。2026-08-29 已人工复核官方页一致，但未做自动校对。
+- [ ] 计费规则硬编码 `internal/schedule`（DefaultSchedule）——DeepSeek 改规则需改代码；config.json 外部化（候选，原记 v0.3.0 位，被 `--at` 与 `--cmd` 连续占用后顺延）。2026-08-29 已人工复核官方页一致，但未做自动校对。
+- [ ] `--cmd` 依赖 `cmd-bridge` 在 PATH（runner 已注入 `~/.local/bin`、`~/.npm-global/bin`、`go/bin`；cpu2 在 `/usr/local/bin`）。桥缺失时运行期 exit 127，入队期无预检。
 - [ ] `daemon.gc()` 与 `recoverInterrupted()` 是 `Load` 后整体 `Save`：读→写之间入队的新任务会被覆盖丢失。该窗口早于 v0.2.4 就存在。最小修法：导出 `Store.Mutate(fn)` 或 `PruneFinished(cutoff)`，把过滤放进单次 flock 里。
 - [ ] 升级二进制后服务不会自动换新版（`Restart=on-failure` 只在崩溃时重生）。v0.2.4 已加版本落后告警；自动检测（systemd path unit 或 ExecStart 哈希比对）待评估。
 - [ ] `--every` 仅支持每日 `HH:MM`——每周/每月重复未实现（用户若要「每周一 09:00」目前只能手动排多个 `--at`）。

@@ -29,11 +29,63 @@ func shQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+// boolSum counts how many of the mutually exclusive mode flags are set.
+func boolSum(flags ...bool) int {
+	n := 0
+	for _, f := range flags {
+		if f {
+			n++
+		}
+	}
+	return n
+}
+
+// ellipsis shortens s to at most max runes, appending "…" when cut. Counting
+// runes (not bytes) keeps CJK prompts from being cut mid-character.
+func ellipsis(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max-1]) + "…"
+}
+
+// addCommand builds the /bin/sh command line for a task.
+//
+// kind is "pi" (pi -p), "cmd" (Command Code via cmd-bridge), or "" for a
+// positional shell command. Prompt text is always single-quoted, so prompts
+// carrying quotes or shell metacharacters survive byte-for-byte.
+//
+// Why --cmd goes through cmd-bridge instead of calling cmd directly: the
+// hardened flag set (--yolo/--tools-all/-t/--skip-onboarding/--max-turns)
+// lives in that bridge so pi subagents and belater share ONE definition.
+// Copying the flags here would drift the moment either side changes.
+func addCommand(kind, prompt, extraArgs string, positional []string) string {
+	switch kind {
+	case "pi":
+		cmd := "pi -p " + shQuote(prompt)
+		if extraArgs != "" {
+			cmd += " " + extraArgs
+		}
+		return cmd
+	case "cmd":
+		cmd := "printf '%s' " + shQuote(prompt) + " | cmd-bridge"
+		if extraArgs != "" {
+			cmd += " " + extraArgs
+		}
+		return cmd
+	default:
+		return strings.Join(positional, " ")
+	}
+}
+
 // cmdAdd enqueues a task.
 func cmdAdd(args []string) int {
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	piPrompt := fs.String("pi", "", "pi-agent 模式：把提示词交给 pi -p 执行")
 	piArgs := fs.String("pi-args", "", "附加到 pi 命令的参数（如 --no-session）")
+	cmdPrompt := fs.String("cmd", "", "Command Code 模式：把提示词交给 cmd-bridge 执行（Go $1 套餐无需 API key）")
+	cmdArgs := fs.String("cmd-args", "", "附加到 cmd-bridge 的参数（如 -m z-ai/glm-5.3-flash、--max-turns 50）")
 	at := fs.String("at", "", "指定执行时间：HH:MM（已过则明天）或 \"YYYY-MM-DD HH:MM\"（精确时刻）")
 	delay := fs.String("delay", "", "从现在起延迟执行（如 2h、90m）")
 	nowFlag := fs.Bool("now", false, "立即执行（等下一个调度 tick）")
@@ -55,22 +107,29 @@ func cmdAdd(args []string) int {
 	// Build the command.
 	var command string
 	isPi := *piPrompt != ""
-	if isPi && fs.NArg() > 0 {
-		return usageError(fs, "--pi 与位置参数命令互斥，只选一种")
+	isCmd := *cmdPrompt != ""
+	if boolSum(isPi, isCmd) > 1 {
+		return usageError(fs, "--pi 与 --cmd 互斥，只选一种")
 	}
-	if !isPi && fs.NArg() == 0 {
-		return usageError(fs, "缺少命令：提供位置参数命令，或用 --pi 指定 pi-agent 提示词")
+	if (isPi || isCmd) && fs.NArg() > 0 {
+		return usageError(fs, "--pi/--cmd 与位置参数命令互斥，只选一种")
+	}
+	if !isPi && !isCmd && fs.NArg() == 0 {
+		return usageError(fs, "缺少命令：提供位置参数命令，或用 --pi / --cmd 指定提示词")
 	}
 	if *piArgs != "" && !isPi {
 		return usageError(fs, "--pi-args 只能与 --pi 一起使用")
 	}
-	if isPi {
-		command = "pi -p " + shQuote(*piPrompt)
-		if *piArgs != "" {
-			command += " " + *piArgs
-		}
-	} else {
-		command = strings.Join(fs.Args(), " ")
+	if *cmdArgs != "" && !isCmd {
+		return usageError(fs, "--cmd-args 只能与 --cmd 一起使用")
+	}
+	switch {
+	case isPi:
+		command = addCommand("pi", *piPrompt, *piArgs, nil)
+	case isCmd:
+		command = addCommand("cmd", *cmdPrompt, *cmdArgs, nil)
+	default:
+		command = addCommand("", "", "", fs.Args())
 	}
 
 	sch := defaultSchedule()
@@ -111,6 +170,10 @@ func cmdAdd(args []string) int {
 			// occurrence of the every time itself (e.g. --every 02:00 runs
 			// tonight at 02:00), not the next off-peak window.
 			runAt = parseHHMM(*every, now, schedLoc)
+		} else if isCmd {
+			// A flat-rate plan has no peak/off-peak price: deferring a --cmd task
+			// to the next off-peak window would buy nothing and only add delay.
+			runAt = now
 		} else {
 			runAt = sch.NextOffPeakStart(now)
 		}
@@ -131,21 +194,20 @@ func cmdAdd(args []string) int {
 		if everyTime.IsZero() {
 			return usageError(fs, "--every 格式应为 HH:MM")
 		}
-		if sch.KindAt(everyTime) == schedule.KindPeak {
+		// Peak pricing only applies to DeepSeek-billed runs; --cmd is flat-rate.
+		if !isCmd && sch.KindAt(everyTime) == schedule.KindPeak {
 			everyWarn = true
 		}
 	}
 
 	taskName := *name
 	if taskName == "" {
-		if isPi {
-			r := []rune(*piPrompt)
-			if len(r) > 40 {
-				taskName = "pi: " + string(r[:39]) + "…"
-			} else {
-				taskName = "pi: " + *piPrompt
-			}
-		} else {
+		switch {
+		case isPi:
+			taskName = "pi: " + ellipsis(*piPrompt, 40)
+		case isCmd:
+			taskName = "cmd: " + ellipsis(*cmdPrompt, 40)
+		default:
 			taskName = command
 		}
 	}
@@ -202,11 +264,28 @@ func cmdAdd(args []string) int {
 	if *at != "" {
 		when += "（用户指定）"
 	}
-	fmt.Printf("已入队 %s · %s · %s 执行 (%s 后)\n", task.ID, task.Name, when, fmtDuration(wait))
-	if isPi {
-		fmt.Printf("  pi-agent 任务: %s\n", command)
+	// A flat-rate plan has no peak/off-peak price, so naming a window would
+	// imply a discount that does not exist. Only call it 立即 when it really
+	// is running now — --delay/--at/--every are scheduled, not immediate.
+	cmdImmediate := isCmd && *at == "" && *delay == "" && *every == ""
+	if isCmd {
+		if cmdImmediate {
+			when = "立即"
+		} else {
+			when = "指定时刻"
+		}
 	}
-	if runAt.Equal(now) && !*nowFlag && sch.KindAt(now) == schedule.KindOffPeak {
+	fmt.Printf("已入队 %s · %s · %s 执行 (%s 后)\n", task.ID, task.Name, when, fmtDuration(wait))
+	switch {
+	case isPi:
+		fmt.Printf("  pi-agent 任务: %s\n", command)
+	case isCmd:
+		fmt.Printf("  Command Code 任务: %s\n", command)
+		if cmdImmediate {
+			fmt.Println("  （$1 套餐按次计费无峰谷差价，故默认立即执行；要排期用 --at/--delay/--every）")
+		}
+	}
+	if runAt.Equal(now) && !*nowFlag && !isCmd && sch.KindAt(now) == schedule.KindOffPeak {
 		fmt.Println("  当前已是空闲时段，任务将在调度器下次 tick 时执行")
 	}
 	if everyWarn {

@@ -2,6 +2,38 @@
 
 All notable changes to belater are documented here.
 
+## [0.4.0] - 2026-10-26
+
+### Added
+
+- **`--cmd "prompt"` — queue Command Code CLI tasks.** The prompt is piped to
+  `cmd-bridge` on stdin and the child runs through the same hardened flag set
+  the pi-agent subagent lane uses, so both callers share one definition instead
+  of two drifting copies. `--cmd-args "..."` appends bridge arguments.
+
+  This exists because the commandcode.ai **Go $1 plan issues no API key**, so it
+  cannot be used as a pi provider — an external CLI lane is the only way to
+  reach it. belater now queues that lane like any other task.
+
+  `--cmd` **runs immediately by default**, unlike `--pi`: a flat-rate plan has
+  no peak/off-peak price difference, so deferring to the next off-peak window
+  would buy nothing and only add delay. `--at`/`--delay`/`--every` still work
+  and behave exactly as they do for `--pi`. The peak-price warning is
+  suppressed for `--cmd` for the same reason.
+
+  Prompt text is single-quoted, so quotes, `$VARS` and backticks inside a
+  prompt reach the bridge literally (covered by a round-trip test).
+
+### Changed
+
+- The `add` command builder became the pure function `addCommand(kind, prompt,
+  extraArgs, positional)` — same behaviour, now unit-testable without touching
+  the queue or the filesystem. `--pi` and `--cmd` are mutually exclusive with
+  each other and with a positional command; every combination exits 2 with an
+  actionable message.
+- Task display names use one rune-aware truncation helper for both `pi: ` and
+  `cmd: ` prefixes, so a long CJK prompt is never cut mid-character.
+
 ## [0.3.0] - 2026-08-30
 
 ### Added

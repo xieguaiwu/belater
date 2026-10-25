@@ -17,6 +17,10 @@ install -m 0755 belater ~/.local/bin/belater
 # Queue a pi-agent task for the next off-peak window (today 18:00 or weekend)
 belater add --pi "Refactor the auth module and add tests"
 
+# Command Code task (Go $1 plan, no API key) — runs immediately by default
+belater add --cmd "Review this PR for concurrency bugs and propose fixes"
+belater add --cmd "Refactor this module" --cmd-args "-m z-ai/glm-5.3-flash --max-turns 60"
+
 # Start a task at an exact date and time
 belater add --at "2026-09-01 02:00" ./month_report.sh
 
@@ -51,6 +55,8 @@ belater log <id>          # per-task log with metadata header
 |:---|:---|
 | `--pi "prompt"` | pi-agent mode: builds `pi -p 'prompt'` |
 | `--pi-args "..."` | Extra pi args, spliced verbatim into the shell command (e.g. `--no-session`, `--model ...`) |
+| `--cmd "prompt"` | Command Code mode: the prompt goes to `cmd-bridge` over stdin (commandcode.ai Go $1 plan needs no API key). **Runs immediately by default** — a flat-rate plan has no peak/off-peak difference; pass `--at`/`--delay`/`--every` to schedule it |
+| `--cmd-args "..."` | Extra cmd-bridge args (e.g. `-m z-ai/glm-5.3-flash`, `--max-turns 50`; `-m`/`--max-turns` replace the bridge defaults instead of stacking) |
 | `--at HH:MM` | Wall-clock time (tomorrow if past; may land in peak — explicit) |
 | `--at "YYYY-MM-DD HH:MM"` | Exact date and time (`T` separator also works; a bare date means 00:00). A past moment is rejected, never moved. Times are Beijing time |
 | `--delay 2h` | Run after a delay |
@@ -92,7 +98,7 @@ belater daemon --uninstall
 当前时段: 空闲 (0.5x 价格) · 周末全天空闲
 下次切换: 周一 09:00 高峰 (1d 16h 55m 后)
 现在就是空闲时段 — 新任务将在下次调度检查（约 15s 内）执行
-调度器: 运行中 (v0.2.4 · tick 15s · 心跳 1s 前) — 到期任务会自动执行
+调度器: 运行中 (v0.4.0 · tick 15s · 心跳 1s 前) — 到期任务会自动执行
 队列: 0 待执行 · 0 运行中 · 2 已完成
 ```
 

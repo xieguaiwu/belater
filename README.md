@@ -58,6 +58,8 @@ belater list
 |:---|:---|
 | `--pi "提示词"` | pi-agent 模式：构造 `pi -p '提示词'` 执行 |
 | `--pi-args "..."` | 附加 pi 参数（按 shell 片段原样拼入，如 `--no-session`、`--model ...`） |
+| `--cmd "提示词"` | Command Code 模式：提示词经 stdin 交给 `cmd-bridge`（commandcode.ai Go $1 套餐无需 API key）。**默认立即执行**——平价套餐无峰谷差价，要排期请显式给 `--at`/`--delay`/`--every` |
+| `--cmd-args "..."` | 附加 cmd-bridge 参数（如 `-m z-ai/glm-5.3-flash`、`--max-turns 50`；`-m`/`--max-turns` 会盖掉桥的默认值而非叠加） |
 | `--at HH:MM` | 指定时间（已过则明天；可落在高峰，用户显式指定） |
 | `--at "YYYY-MM-DD HH:MM"` | 指定确切日期时刻（也接受 `T` 分隔；只写日期 = 当天 00:00）；已过则报错，不静默顺延。时间按北京时间解释 |
 | `--delay 2h` | 从现在起延迟执行 |
@@ -76,6 +78,15 @@ belater list
 ```bash
 # pi-agent 大任务放到晚上空闲时段跑
 belater add --pi "对 quant 项目做全面 code review，输出发现清单"
+
+# Command Code 任务（Go $1 套餐，无需 API key）：默认立即执行
+belater add --cmd "审查这个 PR 的并发安全，给出可落地的修改"
+
+# 换模型 / 抬回合上限
+belater add --cmd "重构这个模块" --cmd-args "-m z-ai/glm-5.3-flash --max-turns 60"
+
+# --cmd 也能排期（--at/--delay/--every 与 --pi 同语义）
+belater add --cmd "生成今日审查报告" --every 02:00 --max-runs 7
 
 # 每天凌晨 2 点自动生成报告，跑 7 次
 belater add --every 02:00 --max-runs 7 --pi "生成今日代码审查报告"
@@ -144,7 +155,7 @@ belater status
 当前时段: 空闲 (0.5x 价格) · 周末全天空闲
 下次切换: 周一 09:00 高峰 (1d 16h 55m 后)
 现在就是空闲时段 — 新任务将在下次调度检查（约 15s 内）执行
-调度器: 运行中 (v0.2.4 · tick 15s · 心跳 1s 前) — 到期任务会自动执行
+调度器: 运行中 (v0.4.0 · tick 15s · 心跳 1s 前) — 到期任务会自动执行
 队列: 0 待执行 · 0 运行中 · 2 已完成
 ```
 
